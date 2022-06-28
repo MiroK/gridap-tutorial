@@ -2,7 +2,7 @@
 using Gridap
 using Gridap.Geometry
 using Printf
-
+import Gridap: ∇
 
 """
 Solve on Ω the Poisson -Δ u = f0 with u = g0 on 
@@ -55,16 +55,18 @@ end
 begin
     # Manufactured solution
     u0(x;k=2, l=1) = cos(k*π*x[1])*cos(l*π*x[2]) + 1
-    # Boundary data comes from the true solution
-    g0 = u0
+    # NOTE: This function is such that grad(u0) is 0 and in turn 
+    # we get very simple case for checking convergence of the multiplier
+
+    g0 = u0 # Boundary data comes from the true solution
     f0(x;k=2, l=1) = ((k*π)^2 + (l*π)^2)*cos(k*π*x[1])*cos(l*π*x[2])
     h0(x) = 0
 
-    pdegree = 3  # Polynomial degree of FE space
+    pdegree = 2  # Polynomial degree of FE space
     qdegree = pdegree
 
     whs = []
-    errors, hs, ndofsV, ndofsQ = [], [], [], []
+    errors_u, errors_p, hs, ndofsV, ndofsQ = [], [], [], [], []
     for k ∈ 2:6
         n = 2^k
 
@@ -81,9 +83,18 @@ begin
         Ω = get_triangulation(uh)
         dΩ = Measure(Ω, 2*pdegree+1)
 
-        e = u0 - uh
-        error = sqrt(sum( ∫( e*e + ∇(e)⋅∇(e) )*dΩ ))
-        append!(errors, error)
+        eu = u0 - uh
+        error_u = sqrt(sum( ∫( eu*eu + ∇(eu)⋅∇(eu) )*dΩ ))
+        append!(errors_u, error_u)
+
+        Γ = get_triangulation(ph)
+        dΓ = Measure(Γ, 2*qdegree+1)
+        # On surface we should be approximating ∇u⋅ν
+        ν = get_normal_vector(Γ)
+
+        error_p = sqrt(sum(∫((ph*ν)⋅(ph*ν))*dΓ))
+        append!(errors_p, error_p)
+
         append!(hs, 1/n)
         append!(ndofsV, length(get_free_dof_ids(uh.fe_space)))
         append!(ndofsQ, length(get_free_dof_ids(ph.fe_space)))
@@ -98,10 +109,14 @@ begin
     writevtk(get_triangulation(uh), "poisson_Usol", order=1, cellfields=["uh" => uh, "u" => u0h])
     writevtk(get_triangulation(ph), "poisson_Psol", order=1, cellfields=["ph" => ph])
 
-    rates = log.(errors[2:end]./errors[1:end-1])./log.(hs[2:end]./hs[1:end-1])
-    rates = [NaN; rates]
-    table = hcat(hs, ndofsV, ndofsQ, errors, rates)
+    rates_u = log.(errors_u[2:end]./errors_u[1:end-1])./log.(hs[2:end]./hs[1:end-1])
+    rates_u = [NaN; rates_u]
+
+    rates_p = log.(errors_p[2:end]./errors_p[1:end-1])./log.(hs[2:end]./hs[1:end-1])
+    rates_p = [NaN; rates_p]
+    
+    table = hcat(hs, ndofsV, errors_u, rates_u, ndofsV, errors_p, rates_p)
     for row in eachrow(table)
-        @printf "h = %.2E dim(V) = %d dim(Q) = %d |u-uh|_1 = %.4E rate = %.2f\n" row...
+        @printf "h = %.2E | dim(V) = %d |u-uh|_1 = %.4E rate = %.2f | dim(Q) = %d |p-ph|_0 = %.4E rate = %.2f\n" row...
     end
 end
