@@ -8,8 +8,10 @@ demos, i.e. multiphysics problems with interface coupling.
 - [ ] 2d-1d problem from paper with Magne
 - [ ] Darcy and Darcy-Babuska
 - [ ] Stokes and Stokes-Babuska
+- [ ] Marcela Szopos problem
 - [ ] Stokes-Darcy free of LM
 - [ ] Stokes-Darcy with LM (Layton)
+- [ ] Simple EMI
 
 ## TODO infrastructure
 - [ ] Getting the matrix 

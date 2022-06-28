@@ -59,8 +59,6 @@ begin
     pdegree = 2  # Polynomial degree of FE space
     qdegree = pdegree
 
-    global op
-
     whs = []
     errors_u, errors_p, hs, ndofsV, ndofsQ = [], [], [], [], []
     for k ∈ 2:6
@@ -71,7 +69,7 @@ begin
         model = CartesianDiscreteModel(domain, partition)
 
         Dirichlet_tags = [5, 6, 7, 8]
-        global op = poisson_solver(model, f0, g0, h0, Dirichlet_tags;
+        op = poisson_solver(model, f0, g0, h0, Dirichlet_tags;
                             pdegree=pdegree,
                             qdegree=qdegree)
 
@@ -121,5 +119,4 @@ begin
     for row in eachrow(table)
         @printf "h = %.2E | dim(V) = %d |u-uh|_1 = %.2E rate = %.2f | dim(Q) = %d |p-ph|_0 = %.2E rate = %.2f\n" row...
     end
-    op
 end

@@ -1,35 +1,9 @@
 
 using Gridap
-using Gridap.Geometry
 using Printf
 
-
-"""
-Assuming 2d model get tags leading to nonzero surface integrals
-"""
-function get_boundary_tags(model)
-    labels = get_face_labeling(model)
-    # FIXME: can we figure out the degree here from the model?
-
-    Γ = BoundaryTriangulation(model)
-    dΓ = Measure(Γ, 0)
-    target = sum(∫(1)*dΓ)
-
-    maybe = unique(get_face_tag(labels, 1))
-    lengths = Dict{eltype(maybe), Float64}()
-    for tag ∈ maybe
-        Γ = BoundaryTriangulation(model, tags=[tag])
-        dΓ = Measure(Γ, 0)
-        l = sum(∫(1)*dΓ)
-
-        l < target && setindex!(lengths, l, tag)
-    end
-
-    @assert isapprox(sum(values(lengths)), target; rtol=1E-8)
-
-    return collect(keys(lengths))
-end
-
+include("GridapUtils.jl")
+using .GridapUtils
 
 """
 Solve on Ω the Poisson -Δ u = f0 with u = g0 on 
@@ -107,7 +81,7 @@ true && begin
         e = u0 - uh
         error = sqrt(sum( ∫( e*e + ∇(e)⋅∇(e) )*dΩ ))
         append!(errors, error)
-        append!(hs, 1/n)
+        append!(hs, minimum(get_mesh_sizes(Ω)))
         append!(ndofs, length(get_free_dof_ids(uh.fe_space)))
     end
 
@@ -120,4 +94,3 @@ true && begin
         @printf "h = %.2E dim(V) = %d |u-uh|_1 = %.4E rate = %.2f\n" row...
     end
 end
-
