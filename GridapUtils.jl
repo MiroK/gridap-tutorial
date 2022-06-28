@@ -42,4 +42,10 @@ end
 
 export get_boundary_tags, get_mesh_sizes
 
+# ----------------------------------------------------------------------------
+
+include("GridapGeometries.jl")
+
+export unit_square_mesh, split_square_mesh
+
 end
