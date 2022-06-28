@@ -14,5 +14,6 @@ demos, i.e. multiphysics problems with interface coupling.
 ## TODO infrastructure
 - [ ] Getting the matrix 
 - [ ] Getting preconditioner
+- [ ] Setup for iterative solvers (in PETSc)
 - [ ] Setup for eigenvalue computations (fractional guys)
-- [ ] Setup for iteratiove solvers
+

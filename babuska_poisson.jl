@@ -43,13 +43,7 @@ function poisson_solver(model, f0, g0, h0, Dirichlet_tags; pdegree, qdegree)
     b((v, q)) = ∫( v*f0 )*dΩ + ∫( q*g0 )*dΓD + ∫(v*h0)*dΓN
 
     op = AffineFEOperator(a, b, W, W)
-
-    ls = LUSolver()
-    solver = LinearFESolver(ls)
-
-    wh = solve(solver, op)
-
-    return wh
+    return op
 end
 
 begin
@@ -65,6 +59,8 @@ begin
     pdegree = 2  # Polynomial degree of FE space
     qdegree = pdegree
 
+    global op
+
     whs = []
     errors_u, errors_p, hs, ndofsV, ndofsQ = [], [], [], [], []
     for k ∈ 2:6
@@ -75,9 +71,15 @@ begin
         model = CartesianDiscreteModel(domain, partition)
 
         Dirichlet_tags = [5, 6, 7, 8]
-        wh = poisson_solver(model, f0, g0, h0, Dirichlet_tags;
+        global op = poisson_solver(model, f0, g0, h0, Dirichlet_tags;
                             pdegree=pdegree,
                             qdegree=qdegree)
+
+        
+        ls = LUSolver()
+        solver = LinearFESolver(ls)
+
+        wh = solve(solver, op)       
         uh, ph = wh
 
         Ω = get_triangulation(uh)
@@ -115,8 +117,9 @@ begin
     rates_p = log.(errors_p[2:end]./errors_p[1:end-1])./log.(hs[2:end]./hs[1:end-1])
     rates_p = [NaN; rates_p]
     
-    table = hcat(hs, ndofsV, errors_u, rates_u, ndofsV, errors_p, rates_p)
+    table = hcat(hs, ndofsV, errors_u, rates_u, ndofsQ, errors_p, rates_p)
     for row in eachrow(table)
-        @printf "h = %.2E | dim(V) = %d |u-uh|_1 = %.4E rate = %.2f | dim(Q) = %d |p-ph|_0 = %.4E rate = %.2f\n" row...
+        @printf "h = %.2E | dim(V) = %d |u-uh|_1 = %.2E rate = %.2f | dim(Q) = %d |p-ph|_0 = %.2E rate = %.2f\n" row...
     end
+    op
 end
