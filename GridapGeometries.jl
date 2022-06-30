@@ -60,7 +60,7 @@ function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; structured::Bool
 
     name
 end
-unit_square_mesh(0.1, :tri; view=true)
+
 
 """Pretty much this
 ____________
