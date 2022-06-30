@@ -107,7 +107,8 @@ function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; structured::Boo
 
     gmsh.model.occ.synchronize()
 
-    structured && model.mesh.setTransfiniteSurface(surf)
+    structured && model.mesh.setTransfiniteSurface(top_surf)
+    structured && model.mesh.setTransfiniteSurface(bottom_surf)
 
     cell_type == :quad && gmsh.option.setNumber("Mesh.RecombineAll", 1)
     gmsh.model.mesh.generate(2)
