@@ -26,6 +26,12 @@ function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; structured::Bool
     surf = occ.addPlaneSurface([loop])
     occ.synchronize()
 
+    names = ("ll", "lr", "ur", "ul")
+    for (tag, (point, name)) ∈ enumerate(zip(points, names))
+        point_group = model.addPhysicalGroup(0, [point], tag)
+        gmsh.model.setPhysicalName(0, point_group, name)
+    end
+
     surf_group = model.addPhysicalGroup(2, [surf], 1)
     gmsh.model.setPhysicalName(2, surf_group, "surface")
 
@@ -54,7 +60,7 @@ function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; structured::Bool
 
     name
 end
-
+unit_square_mesh(0.1, :tri; view=true)
 
 """Pretty much this
 ____________
@@ -92,6 +98,13 @@ function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; structured::Boo
     bottom_surf = occ.addPlaneSurface([bottom_loop])
 
     occ.synchronize()
+
+    # Mark the boundary points of the interface top_loop
+    iface_left = model.addPhysicalGroup(0, [points[1]], 1)
+    gmsh.model.setPhysicalName(0, iface_left, "iface_left")
+
+    iface_right = model.addPhysicalGroup(0, [points[4]], 2)
+    gmsh.model.setPhysicalName(0, iface_right, "iface_right")
 
     top_surf_group = model.addPhysicalGroup(2, [top_surf], 1)
     gmsh.model.setPhysicalName(2, top_surf_group, "top_surface")
