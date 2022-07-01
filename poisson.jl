@@ -37,7 +37,7 @@ function poisson_solver(model, f0, g0, h0, Dirichlet_tags; pdegree)
 
     Γ = BoundaryTriangulation(model, tags=Neumann_tags)
     ν = get_normal_vector(Γ)
-    dΓ = Measure(Γ, degree)
+    dΓ = Measure(Γ, 2*degree)
     b(v) = ∫( v*f0 )*dΩ + ∫(v*(h0⋅ν))*dΓ
 
     one(x) = 1
@@ -58,9 +58,9 @@ true && begin
     x = Symbolics.variables(:x, 1:2)
 
     # Manufactured solution
-    # u0_ = cos(π*(x[1]*x[2]))
-    # u0_ = cos(2*π*x[1])*cos(3*π*x[2]) + 1
-    u0_ = cos(2*π*(x[1]-x[2]))
+    #u0_ = cos(π*(x[1]*x[2]))
+    u0_ = cos(2*π*x[1])*cos(3*π*x[2]) + 1
+    # u0_ = cos(2*π*(x[1]-x[2]))
 
     flux_ = -Grad(u0_)
     f0_ = Div(flux_)
@@ -70,17 +70,17 @@ true && begin
 
     Dirichlet_tags = [5, 6]
 
-    pdegree = 1 # Polynomial degree of FE space
+    pdegree = 3 # Polynomial degree of FE space
 
     global uh
     errors, hs, ndofs = [], [], []
     for k ∈ 2:6
-        n = 2^(k+2)
+        n = 2^(k)
 
         domain = (0,1,0,1)
         partition = (n, n)
         model = CartesianDiscreteModel(domain, partition)
-        model = simplexify(model)
+        # model = simplexify(model)
 
         global uh = poisson_solver(model, f0, u0, h0, Dirichlet_tags; pdegree=pdegree)
 

@@ -52,7 +52,7 @@ export unit_square_mesh, split_square_mesh
 
 include("GridapSym.jl")
 
-export Grad, Div, Curl
+export Grad, Div, Curl, Rot, Dot, Inner, Sym, Skew
 export compile
 
 end
