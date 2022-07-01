@@ -6,22 +6,48 @@ using GridapGmsh: gmsh, GmshDiscreteModel
 4|     |2
  |__1__|
 """
-function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; structured::Bool=false, view::Bool=false, save::String="unit_square")
+function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=Inf, structured::Bool=false, view::Bool=false, save::String="unit_square")
     @assert clmax > 0 
     @assert cell_type ∈ (:quad, :tri)
     @assert !isempty(save)
-    
+    @assert distance == Inf || distance > 0
+    @assert !(distance < Inf && structured)
+
     gmsh.initialize(["", "-clmax", string(clmax)])
 
     model = gmsh.model
     occ = model.occ
 
-    points = [occ.addPoint(0, 0, 0), 
-              occ.addPoint(1, 0, 0), 
-              occ.addPoint(1, 1, 0), 
-              occ.addPoint(0, 1, 0)]
+    make_line = (p, q) -> occ.addLine(p, q)
 
-    lines = [occ.addLine(points[p], points[1 + p%4]) for p ∈ eachindex(points)] 
+    points = []
+    if distance == Inf
+        push!(points, [occ.addPoint(0, 0, 0), 
+                       occ.addPoint(1, 0, 0), 
+                       occ.addPoint(1, 1, 0), 
+                       occ.addPoint(0, 1, 0)]...)
+        lines = [make_line(points[p], points[ma + p%4]) for p ∈ eachindex(points)] 
+    else
+        θ = 1/2/distance
+        center = distance*[sin(θ), -cos(θ)]
+        ϕ = (π-θ)/2
+
+        center_id = occ.addPoint(center[1], center[2], 0)
+        make_arc = (p, q) -> occ.addCircleArc(p, center_id, q)
+
+        A = center + distance*[-cos(ϕ), sin(ϕ)]
+        B = center + distance*[cos(ϕ), sin(ϕ)]
+        C = center + (1+distance)*[cos(ϕ), sin(ϕ)]
+        D = center + (1+distance)*[-cos(ϕ), sin(ϕ)]
+
+        for p ∈ (A, B, C, D)
+            push!(points, occ.addPoint(p[1], p[2], 0))
+        end
+
+        lines = [!isodd(i) ? make_line(points[p], points[1 + p%4]) : make_arc(points[p], points[1 + p%4]) 
+                 for (i, p) ∈ enumerate(eachindex(points))] 
+    end
+
     loop = occ.addCurveLoop(lines)
     surf = occ.addPlaneSurface([loop])
     occ.synchronize()
@@ -67,27 +93,63 @@ ____________
 |__STOKES__|
 |__DARCY___|
 """
-function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; structured::Bool=false, view::Bool=false, save::String="split_square")
+function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=Inf, structured::Bool=false, view::Bool=false, save::String="split_square")
     @assert clmax > 0 
     @assert cell_type ∈ (:quad, :tri)
     @assert !isempty(save)
+    @assert distance == Inf || distance > 0
+    @assert !(distance < Inf && structured)
     
     gmsh.initialize(["", "-clmax", string(clmax)])
 
     model = gmsh.model
     occ = model.occ
 
-    points = [occ.addPoint(0, 0, 0),          
-              occ.addPoint(0, 0.5, 0), 
-              occ.addPoint(1, 0.5, 0), 
-              occ.addPoint(1, 0, 0),
-              occ.addPoint(1, -0.5, 0),
-              occ.addPoint(0, -0.5, 0)]
+    make_line = (p, q) -> occ.addLine(p, q)
 
-    npts = length(points)
-    lines = [occ.addLine(points[p], points[1 + p%npts]) for p ∈ eachindex(points)] 
-    # Add the interface
-    append!(lines, occ.addLine(points[1], points[4]))
+    points = []
+    if distance == Inf
+        push!(points, [occ.addPoint(0, 0, 0),          
+                       occ.addPoint(0, 0.5, 0), 
+                       occ.addPoint(1, 0.5, 0), 
+                       occ.addPoint(1, 0, 0),
+                       occ.addPoint(1, -0.5, 0),
+                       occ.addPoint(0, -0.5, 0)]...)
+
+        npts = length(points)
+        lines = [occ.addLine(points[p], points[1 + p%npts]) for p ∈ eachindex(points)] 
+        # Add the interface
+        append!(lines, occ.addLine(points[1], points[4]))
+    else
+        θ = 1/2/distance
+        center = distance*[sin(θ), -cos(θ)]
+        ϕ = (π-θ)/2
+
+        center_id = occ.addPoint(center[1], center[2], 0)
+        make_arc = (p, q) -> occ.addCircleArc(p, center_id, q)
+
+        #  B    C 
+        #  A    D
+        #  F    E
+        pointsX = [center + (distance+0.5)*[-cos(ϕ), sin(ϕ)],
+                   center + (distance+1)*[-cos(ϕ), sin(ϕ)],
+                   center + (distance+1)*[cos(ϕ), sin(ϕ)],
+                   center + (distance+0.5)*[cos(ϕ), sin(ϕ)],
+                   center + distance*[cos(ϕ), sin(ϕ)],
+                   center + distance*[-cos(ϕ), sin(ϕ)]]
+        
+        for p ∈ pointsX
+            push!(points, occ.addPoint(p[1], p[2], 0))
+        end
+        
+        npts = length(points)
+        # 1, 3, 4, 6
+        segments = (1, 3, 4, 6)
+        lines = [i ∈ segments ? occ.addLine(points[p], points[1 + p%npts]) : make_arc(points[p], points[1 + p%npts])
+                 for (i, p) ∈ enumerate(eachindex(points))] 
+        # Add the interface
+        append!(lines, make_arc(points[1], points[4]))
+    end
 
     top_lines = [lines[1], lines[2], lines[3], -lines[end]]
     top_loop = occ.addCurveLoop(top_lines)
