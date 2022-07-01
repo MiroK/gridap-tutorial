@@ -13,6 +13,9 @@ function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=I
     @assert distance == Inf || distance > 0
     @assert !(distance < Inf && structured)
 
+    !isdir(".msh_cache") && mkdir(".msh_cache")
+    save = joinpath(".msh_cache", save)
+
     gmsh.initialize(["", "-clmax", string(clmax)])
 
     model = gmsh.model
@@ -99,6 +102,9 @@ function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=
     @assert !isempty(save)
     @assert distance == Inf || distance > 0
     @assert !(distance < Inf && structured)
+
+    !isdir(".msh_cache") && mkdir(".msh_cache")
+    save = joinpath(".msh_cache", save)
     
     gmsh.initialize(["", "-clmax", string(clmax)])
 
@@ -141,7 +147,7 @@ function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=
         for p ∈ pointsX
             push!(points, occ.addPoint(p[1], p[2], 0))
         end
-        
+
         npts = length(points)
         # 1, 3, 4, 6
         segments = (1, 3, 4, 6)
@@ -172,7 +178,7 @@ function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=
     gmsh.model.setPhysicalName(2, top_surf_group, "top_surface")
 
     bottom_surf_group = model.addPhysicalGroup(2, [bottom_surf], 2)
-    gmsh.model.setPhysicalName(2, bottom_surf_group, "top_surface")
+    gmsh.model.setPhysicalName(2, bottom_surf_group, "bottom_surface")
 
     names = ("top_left", "top", "top_right", "bottom_right", "bottom", "bottom_left", "interface")
     for (tag, (line, name)) ∈ enumerate(zip(lines, names))
