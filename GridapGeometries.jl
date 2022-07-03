@@ -6,8 +6,8 @@ using GridapGmsh: gmsh, GmshDiscreteModel
 4|     |2
  |__1__|
 """
-function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=Inf, structured::Bool=false, view::Bool=false, save::String="unit_square")
-    @assert clmax > 0 
+function unit_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real=Inf, structured::Bool=false, view::Bool=false, save::String="unit_square")
+    @assert clscale > 0 
     @assert cell_type ∈ (:quad, :tri)
     @assert !isempty(save)
     @assert distance == Inf || distance > 0
@@ -16,7 +16,7 @@ function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=I
     !isdir(".msh_cache") && mkdir(".msh_cache")
     save = joinpath(".msh_cache", save)
 
-    gmsh.initialize(["", "-clmax", string(clmax)])
+    gmsh.initialize(["", "-clscale", string(clscale)])
 
     model = gmsh.model
     occ = model.occ
@@ -82,7 +82,7 @@ function unit_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=I
         gmsh.fltk.run()
     end
 
-    name = "$(save)_$(string(clmax)).msh"
+    name = "$(save)_$(string(clscale)).msh"
     gmsh.write(name)
 
     gmsh.finalize()
@@ -96,8 +96,8 @@ ____________
 |__STOKES__|
 |__DARCY___|
 """
-function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=Inf, structured::Bool=false, view::Bool=false, save::String="split_square")
-    @assert clmax > 0 
+function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real=Inf, structured::Bool=false, view::Bool=false, save::String="split_square")
+    @assert clscale > 0 
     @assert cell_type ∈ (:quad, :tri)
     @assert !isempty(save)
     @assert distance == Inf || distance > 0
@@ -106,7 +106,7 @@ function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=
     !isdir(".msh_cache") && mkdir(".msh_cache")
     save = joinpath(".msh_cache", save)
     
-    gmsh.initialize(["", "-clmax", string(clmax)])
+    gmsh.initialize(["", "-clscale", string(clscale)])
 
     model = gmsh.model
     occ = model.occ
@@ -199,7 +199,7 @@ function split_square_mesh(clmax::Real, cell_type::Symbol=:quad; distance::Real=
         gmsh.fltk.run()
     end
 
-    name = "$(save)_$(string(clmax)).msh"
+    name = "$(save)_$(string(clscale)).msh"
     gmsh.write(name)
 
     gmsh.finalize()
