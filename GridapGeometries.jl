@@ -29,7 +29,7 @@ function unit_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real
                        occ.addPoint(1, 0, 0), 
                        occ.addPoint(1, 1, 0), 
                        occ.addPoint(0, 1, 0)]...)
-        lines = [make_line(points[p], points[ma + p%4]) for p ∈ eachindex(points)] 
+        lines = [make_line(points[p], points[1 + p%4]) for p ∈ eachindex(points)] 
     else
         θ = 1/2/distance
         center = distance*[sin(θ), -cos(θ)]
