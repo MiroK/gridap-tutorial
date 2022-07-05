@@ -95,22 +95,35 @@ using Gridap, GridapGmsh
 name = unit_square_mesh(1)
 model = GmshDiscreteModel(name)
 labels = get_face_labeling(model)
+# Bind names to ids from outside gmsh
+add_tag_from_tags!(labels, "BOTTOM", [1])
+add_tag_from_tags!(labels, "RIGHT", [2])
+add_tag_from_tags!(labels, "TOP", [3])
+add_tag_from_tags!(labels, "LEFT", [4])
 
 χmap = Dict("bottom" => (x; tol=1E-8) -> (abs(x[2]) < tol && -tol < x[1] < 1+tol) ? 1. : 0.,
             "top" => (x; tol=1E-8) -> (abs(x[2]-1) < tol && -tol < x[1] < 1+tol) ? 1. : 0.,
             "left" => (x; tol=1E-8) -> (abs(x[1]) < tol && -tol < x[2] < 1+tol) ? 1. : 0.,
             "right" => (x; tol=1E-8) -> (abs(x[1]-1) < tol && -tol < x[2] < 1+tol) ? 1. : 0.)
 
-for (tag, χ) ∈ χmap
+# This works using the data from gmsh
+tags = collect(keys(χmap))
+# Here we try with names assigned to physical tags; no luck
+# tags = collect(map(uppercase, tags))
+
+for tag ∈ tags
     Γ = BoundaryTriangulation(model, labels, tags=tag)
     dΓ = Measure(Γ, 1)
+
+    χ = χmap[lowercase(tag)]
 
     e = sum(∫(χ)*dΓ)
     el = sum(∫(1)*dΓ)
     @show (tag, e, el)
-    for (tag1, χ) in χmap
+    for tag1 ∈ tags
         if tag != tag1
-            ee = sum(∫(χ)*dΓ)
+            ϕ = χmap[lowercase(tag1)]
+            ee = sum(∫(ϕ)*dΓ)
             @show (" ", tag1, ee)
         end
     end 
