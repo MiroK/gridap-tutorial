@@ -96,10 +96,10 @@ name = unit_square_mesh(1)
 model = GmshDiscreteModel(name)
 labels = get_face_labeling(model)
 
-χmap = Dict("bottom" => begin (x; tol=1E-8) -> (abs(x[2]) < tol && -tol < x[1] < 1+tol) ? 1. : 0. end,
-            "top" => begin (x; tol=1E-8) -> (abs(x[2]-1) < tol && -tol < x[1] < 1+tol) ? 1. : 0. end,
-            "left" => begin (x; tol=1E-8) -> (abs(x[1]) < tol && -tol < x[2] < 1+tol) ? 1. : 0. end,
-            "right" => begin (x; tol=1E-8) -> (abs(x[1]-1) < tol && -tol < x[2] < 1+tol) ? 1. : 0. end)
+χmap = Dict("bottom" => (x; tol=1E-8) -> (abs(x[2]) < tol && -tol < x[1] < 1+tol) ? 1. : 0.,
+            "top" => (x; tol=1E-8) -> (abs(x[2]-1) < tol && -tol < x[1] < 1+tol) ? 1. : 0.,
+            "left" => (x; tol=1E-8) -> (abs(x[1]) < tol && -tol < x[2] < 1+tol) ? 1. : 0.,
+            "right" => (x; tol=1E-8) -> (abs(x[1]-1) < tol && -tol < x[2] < 1+tol) ? 1. : 0.)
 
 for (tag, χ) ∈ χmap
     Γ = BoundaryTriangulation(model, labels, tags=tag)
