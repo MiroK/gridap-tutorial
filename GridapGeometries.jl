@@ -1,5 +1,5 @@
 using GridapGmsh: gmsh, GmshDiscreteModel
-
+using LinearAlgebra
 
 """[0, 1]^2 with tri/quad cells
   __3__
@@ -96,12 +96,14 @@ ____________
 |__STOKES__|
 |__DARCY___|
 """
-function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real=Inf, structured::Bool=false, view::Bool=false, save::String="split_square")
+function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real=Inf, offset::Real=0, structured::Bool=false, view::Bool=false, save::String="split_square")
     @assert clscale > 0 
     @assert cell_type ∈ (:quad, :tri)
     @assert !isempty(save)
     @assert distance == Inf || distance > 0
     @assert !(distance < Inf && structured)
+    @assert -0.5 < offset < 0.5
+    @assert !(abs(offset) > 0 && structured)
 
     !isdir(".msh_cache") && mkdir(".msh_cache")
     save = joinpath(".msh_cache", save)
@@ -118,7 +120,7 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
         push!(points, [occ.addPoint(0, 0, 0),          
                        occ.addPoint(0, 0.5, 0), 
                        occ.addPoint(1, 0.5, 0), 
-                       occ.addPoint(1, 0, 0),
+                       occ.addPoint(1, offset, 0),
                        occ.addPoint(1, -0.5, 0),
                        occ.addPoint(0, -0.5, 0)]...)
 
@@ -132,7 +134,6 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
         ϕ = (π-θ)/2
 
         center_id = occ.addPoint(center[1], center[2], 0)
-        make_arc = (p, q) -> occ.addCircleArc(p, center_id, q)
 
         #  B    C 
         #  A    D
@@ -140,7 +141,7 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
         pointsX = [center + (distance+0.5)*[-cos(ϕ), sin(ϕ)],
                    center + (distance+1)*[-cos(ϕ), sin(ϕ)],
                    center + (distance+1)*[cos(ϕ), sin(ϕ)],
-                   center + (distance+0.5)*[cos(ϕ), sin(ϕ)],
+                   center + (distance+0.5+offset)*[cos(ϕ), sin(ϕ)],
                    center + distance*[cos(ϕ), sin(ϕ)],
                    center + distance*[-cos(ϕ), sin(ϕ)]]
         
@@ -151,10 +152,24 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
         npts = length(points)
         # 1, 3, 4, 6
         segments = (1, 3, 4, 6)
-        lines = [i ∈ segments ? occ.addLine(points[p], points[1 + p%npts]) : make_arc(points[p], points[1 + p%npts])
+        lines = [i ∈ segments ? occ.addLine(points[p], points[1 + p%npts]) : occ.addCircleArc(points[p], center_id, points[1 + p%npts])
                  for (i, p) ∈ enumerate(eachindex(points))] 
+
+        A = center + (distance+0.5)*[-cos(ϕ), sin(ϕ)] 
+        B = center + (distance+0.5+offset)*[cos(ϕ), sin(ϕ)]   
+        τ = [0 1; -1 0]*(B-A)
+        P = (A+B)/2
+        @assert abs(dot(τ, B-A)) < 1E-13
+        a, b, c = norm(τ, 2)^2, -2*dot(τ, A-P), norm(A-P, 2)^2-distance^2
+        s = (-b + sqrt(b^2 - 4*a*c))/2/a
+        C = P + s*τ
+        @assert abs(norm(A-C)-norm(B-C)) < 1E-13
+        @assert abs(norm(A-C)-distance) < 1E-13
+
+        iface_center_id = occ.addPoint(C[1], C[2], 0)
+
         # Add the interface
-        append!(lines, make_arc(points[1], points[4]))
+        append!(lines, occ.addCircleArc(points[1], iface_center_id, points[4]))
     end
 
     top_lines = [lines[1], lines[2], lines[3], -lines[end]]
@@ -168,11 +183,11 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
     occ.synchronize()
 
     # Mark the boundary points of the interface top_loop
-    iface_left = model.addPhysicalGroup(0, [points[1]], 1)
-    gmsh.model.setPhysicalName(0, iface_left, "iface_left")
-
-    iface_right = model.addPhysicalGroup(0, [points[4]], 2)
-    gmsh.model.setPhysicalName(0, iface_right, "iface_right")
+    names = ("iface_left", "ul", "ur", "iface_right", "lr", "ll")
+    for (tag, (point, name)) ∈ enumerate(zip(points, names))
+        iface_tag = model.addPhysicalGroup(0, [point], tag)
+        gmsh.model.setPhysicalName(0, iface_tag, name)
+    end
 
     top_surf_group = model.addPhysicalGroup(2, [top_surf], 1)
     gmsh.model.setPhysicalName(2, top_surf_group, "top_surface")

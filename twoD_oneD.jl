@@ -5,7 +5,7 @@ include("GridapUtils.jl")
 using .GridapUtils: unit_square_mesh, split_square_mesh
 
 
-model = GmshDiscreteModel(split_square_mesh(0.05, :tri; distance=2))
+model = GmshDiscreteModel(split_square_mesh(0.05, :tri; distance=2, offset=-0.2))
 
 Ω = Triangulation(model)
 Ω₁ = Triangulation(model, tags=["top_surface"])
@@ -33,15 +33,15 @@ Y = MultiFieldFESpace([VΩ, VΓ, Q])
 X = MultiFieldFESpace([UΩ, UΓ, P])
 
 κ = 1E-5
-κ_ = 1E-2
-γ = 0.4
+κ_ = 1E2
+γ = 1E6
 
 a((u, u_, p), (v, v_, q)) = ∫(κ*(∇(u)⋅∇(v)))*dΩ +  ∫(κ_*(∇(u_)⋅∇(v_)))*dΓ + ∫(γ*(v-v_)*p)*dΓ + ∫(γ*(u-u_)*q)*dΓ
 
 
 f = 0
 f_ = 0
-g_ = 0.1
+g_ = 1
 
 L((v, v_, q)) = ∫(f*v)*dΩ + ∫(f_*v_)*dΓ + ∫(q*g_)*dΓ
 
