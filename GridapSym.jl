@@ -46,18 +46,32 @@ function Rot(f::Num; coords::Vector{Num}=x)
     [g[2], -g[1]]
 end
 
-function compile(f::Num, args)
-    build_function(f, args; expression=Val{false})
+function compile(f::Num, args; kwargs...)
+    f_expr = build_function(f, args; expression=Val{true})
+
+    isempty(kwargs) && return eval(f_expr)
+
+    # Now we want to change the function signature
+    f_arguments = f_expr.args[1]
+    # At this point it is a tuple :()
+    args_ = Vector{Any}()
+    push!(args_, f_arguments.args[1])
+    # We want to add kwards
+    for (k, v) ∈ kwargs
+        push!(args_, :($k=$v))
+    end
+    f_expr.args[1] = Expr(:block, args_...)
+
+    eval(f_expr)
 end
 
-function compile(f::Vector{Num}, args)
-    fs = [build_function(f[i], args; expression=Val{false})
-          for i ∈ eachindex(f)] 
-    g(x) = VectorValue([fs[i](x) for i ∈ eachindex(fs)]...)
+function compile(f::Vector{Num}, args; kwargs...)
+    fs = [compile(fi, args; kwargs...) for fi ∈ f]
+    @show fs
+    g(x; kwargs...) = VectorValue([fi(x; kwargs...) for fi ∈ fs]...)
 end
 
-function compile(f::Matrix{Num}, args)
-    fs = [build_function(f[i], args; expression=Val{false})
-          for i ∈ eachindex(f)] 
-    g(x) = TensorValue([fs[i](x) for i ∈ eachindex(fs)]...)
+function compile(f::Matrix{Num}, args; kwargs...)
+    fs = [compile(fi, args; kwargs...) for fi ∈ f]
+    g(x; kwargs...) = TensorValue([fi(x; kwargs...) for fi ∈ fs]...)
 end
