@@ -52,15 +52,15 @@ function compile(f::Num, args; kwargs...)
     isempty(kwargs) && return eval(f_expr)
 
     # Now we want to change the function signature
-    f_arguments = f_expr.args[1]
     # At this point it is a tuple :()
     args_ = Vector{Any}()
-    push!(args_, f_arguments.args[1])
     # We want to add kwards
     for (k, v) ∈ kwargs
-        push!(args_, :($k=$v))
+        push!(args_, Expr(:kw, k, v))
     end
-    f_expr.args[1] = Expr(:block, args_...)
+    kws = Expr(:parameters, args_...)
+
+    f_expr.args[1] = Expr(:tuple, kws, first(f_expr.args[1].args))
 
     eval(f_expr)
 end
