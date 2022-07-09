@@ -1,5 +1,26 @@
 using GridapGmsh: gmsh, GmshDiscreteModel
+using Symbolics: variables, Num
 using LinearAlgebra
+
+
+"""Normal vector of segment"""
+function seg_normal(A, B)
+    τ = B - A
+    n = [0 -1; 1 0]*τ
+    normal = n/norm(n)
+    Vector{Num}(normal)
+end
+
+
+"""Normal vector of circular arc"""
+function arc_normal(A, C, B)
+    r = norm(A-C)
+    x = Symbolics.variables(:x, 1:2)
+
+    n = [(x[1]-C[1])/r, (x[2]-C[2])/r] 
+end
+
+
 
 """[0, 1]^2 with tri/quad cells
   __3__
@@ -23,13 +44,19 @@ function unit_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real
 
     make_line = (p, q) -> occ.addLine(p, q)
 
-    points = []
+    points, normals = [], Dict{String, Vector{Num}}()
     if distance == Inf
         push!(points, [occ.addPoint(0, 0, 0), 
                        occ.addPoint(1, 0, 0), 
                        occ.addPoint(1, 1, 0), 
                        occ.addPoint(0, 1, 0)]...)
         lines = [make_line(points[p], points[1 + p%4]) for p ∈ eachindex(points)] 
+    
+        # Outward normal vectors
+        normals["bottom"] = Vector{Num}([0, -1])
+        normals["right"] = Vector{Num}([1, 0])
+        normals["top" ] = Vector{Num}([0, 1])
+        normals["left"] = Vector{Num}([-1, 0])
     else
         θ = 1/2/distance
         center = distance*[sin(θ), -cos(θ)]
@@ -49,6 +76,12 @@ function unit_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real
 
         lines = [!isodd(i) ? make_line(points[p], points[1 + p%4]) : make_arc(points[p], points[1 + p%4]) 
                  for (i, p) ∈ enumerate(eachindex(points))] 
+
+        x = Symbolics.variables(:x, 1:2)
+        normals["bottom"] = -arc_normal(A, center, B)
+        normals["right"] = seg_normal(C, B)
+        normals["top" ] = arc_normal(D, center, C)
+        normals["left"] = seg_normal(A, D)
     end
 
     loop = occ.addCurveLoop(lines)
@@ -87,7 +120,7 @@ function unit_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real
 
     gmsh.finalize()
 
-    name
+    (name, normals)
 end
 
 
@@ -115,7 +148,7 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
 
     make_line = (p, q) -> occ.addLine(p, q)
 
-    points = []
+    points, normals = [], Dict{String, Vector{Num}}()
     if distance == Inf
         push!(points, [occ.addPoint(0, 0, 0),          
                        occ.addPoint(0, 0.5, 0), 
@@ -128,6 +161,15 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
         lines = [occ.addLine(points[p], points[1 + p%npts]) for p ∈ eachindex(points)] 
         # Add the interface
         append!(lines, occ.addLine(points[1], points[4]))
+
+        normals["top_left"] = Vector{Num}([-1, 0])
+        normals["top"] = Vector{Num}([0, 1])
+        normals["top_right"] = Vector{Num}([1, 0])
+        normals["bottom_right"] = Vector{Num}([1, 0])
+        normals["bottom"] = Vector{Num}([0, -1])
+        normals["bottom_left"] = Vector{Num}([-1, 0])
+        # (dx, dy) = (1, offset), from bottom to top
+        normals["interface"] = Vector{Num}([-offset, 1]/sqrt(1+offset^2))
     else
         θ = 1/2/distance
         center = distance*[sin(θ), -cos(θ)]
@@ -170,6 +212,16 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
 
         # Add the interface
         append!(lines, occ.addCircleArc(points[1], iface_center_id, points[4]))
+
+        normals["top_left"] = seg_normal(pointsX[1], pointsX[2])
+        normals["top"] = arc_normal(pointsX[2], center, pointsX[3])
+        normals["top_right"] = seg_normal(pointsX[3], pointsX[4])
+        normals["bottom_right"] = seg_normal(pointsX[4], pointsX[5])
+        # Below
+        normals["bottom"] = -arc_normal(pointsX[5], center, pointsX[6])
+        normals["bottom_left"] = seg_normal(pointsX[6], pointsX[1])
+        # (dx, dy) = (1, offset), from bottom to top
+        normals["interface"] = arc_normal(pointsX[1], C, pointsX[4])
     end
 
     top_lines = [lines[1], lines[2], lines[3], -lines[end]]
@@ -219,5 +271,5 @@ function split_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Rea
 
     gmsh.finalize()
 
-    name
+    (name, normals)
 end

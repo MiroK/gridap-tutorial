@@ -2,7 +2,8 @@ using Gridap
 using GridapGmsh
 
 include("GridapUtils.jl")
-using .GridapUtils: unit_square_mesh, split_square_mesh
+using .GridapUtils: unit_square_mesh, split_square_mesh, compile
+using Symbolics
 
 """
 Can we have boundary of a boundary?
@@ -129,7 +130,7 @@ function uniform_grid(x; digits=14)
     return (length(indices), length(diff0)+1)
 end
 
-true && begin
+false && begin
     using Plots    
 
     model = CartesianDiscreteModel((0, 1, 0, 1), (300, 400))
@@ -145,4 +146,27 @@ true && begin
     image = fvals[perm]
 
     Plots.heatmap(image)
+end
+
+true && begin
+    mesh_path, normals = unit_square_mesh(0.05, :tri; distance=2)
+    
+    model = GmshDiscreteModel(mesh_path)
+    x = Symbolics.variables(:x, 1:2)
+    for (tag, normal) ∈ normals
+        Γ = BoundaryTriangulation(model, tags=[tag])
+        n = get_normal_vector(Γ)
+
+        error, agreed = Inf, false
+        # Wrong up to a sign
+        for sign ∈ (1, -1)
+            my_normal = compile(sign*normal, x)
+            dΓ = Measure(Γ, 1)
+            e = ∫((n-my_normal)⋅(n-my_normal))*dΓ
+            error = min(error, sqrt(sum(e)))
+            # NOTE: this just needs to be a small number of circular arcs
+            agreed = agreed || (sign == 1 && error < 1E-4)
+        end
+        @show (tag, error, agreed)
+    end 
 end

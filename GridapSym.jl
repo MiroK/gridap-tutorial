@@ -67,7 +67,6 @@ end
 
 function compile(f::Vector{Num}, args; kwargs...)
     fs = [compile(fi, args; kwargs...) for fi ∈ f]
-    @show fs
     g(x; kwargs...) = VectorValue([fi(x; kwargs...) for fi ∈ fs]...)
 end
 
