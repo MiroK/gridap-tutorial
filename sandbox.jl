@@ -87,3 +87,62 @@ function interface_integration()
 
     b = assemble_vector(L, V)
 end
+
+"""
+Compute permutation of indices of P0 function space of mesh such 
+that reordered data can be used in imshow
+"""
+function imageperm(mesh)
+    gdim, _ = eltype(get_grid(mesh).node_coords).parameters
+    @assert gdim == 2
+
+    elm = ReferenceFE(lagrangian, Float64, 0)
+    V = TestFESpace(mesh, elm; conformity=:L2)
+
+    x = get_free_dof_values(interpolate_everywhere(x -> x[1], V))
+    dx = uniform_grid(x)
+
+    y = get_free_dof_values(interpolate_everywhere(x -> x[2], V))
+    dy = uniform_grid(y)
+
+    @assert dx == dy || dx == (dy[2], dy[1])
+    # Tuples are sorted in "lexicographic which we want"
+    idx = sortperm(collect(zip(x, y)))
+    reshape(idx, dy)
+end
+
+function uniform_grid(x; digits=14)
+    x = round.(x; digits=digits)
+    # ccc  abc
+    # bbb  abc
+    # aaa  abc
+    indices = Dict{eltype(x), Vector{Integer}}()
+    for xi ∈ x
+        xi ∉ keys(indices) && setindex!(indices, findall(x -> x == xi, x), xi)
+    end
+    # We found all
+    @assert all(i == v for (i, v) ∈ enumerate(sort(vcat(values(indices)...))))
+    # They are equidistant
+    diff0 = diff(indices[first(keys(indices))])
+    @assert all(norm(diff0 - diff(val)) < 1E-13 for val ∈ values(indices))
+
+    return (length(indices), length(diff0)+1)
+end
+
+true && begin
+    using Plots    
+
+    model = CartesianDiscreteModel((0, 1, 0, 1), (300, 400))
+    Ω = Triangulation(model)
+
+    elm = ReferenceFE(lagrangian, Float64, 0)
+    V = TestFESpace(Ω, elm; conformity=:L2)
+
+    f = interpolate_everywhere(x -> sin(2*π*x[1]), V)
+    fvals = get_free_dof_values(f)
+
+    perm = imageperm(Ω)
+    image = fvals[perm]
+
+    Plots.heatmap(image)
+end
