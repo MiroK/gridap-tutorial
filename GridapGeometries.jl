@@ -15,11 +15,166 @@ end
 """Normal vector of circular arc"""
 function arc_normal(A, C, B)
     r = norm(A-C)
-    x = Symbolics.variables(:x, 1:2)
+    x = variables(:x, 1:2)
 
     n = [(x[1]-C[1])/r, (x[2]-C[2])/r] 
 end
 
+
+"""Mesh a circle of radius r and center (0, 0)"""
+function circle_mesh(clscale::Real, cell_type::Symbol=:quad; radius::Real=1, view::Bool=false, save::String="circle")
+    @assert clscale > 0 
+    @assert cell_type ∈ (:quad, :tri)
+    @assert !isempty(save)
+    @assert 0 < radius
+
+    !isdir(".msh_cache") && mkdir(".msh_cache")
+    save = joinpath(".msh_cache", save)
+
+    gmsh.initialize(["", "-clscale", string(clscale)])
+
+    model = gmsh.model
+    occ = model.occ
+
+    #   A 
+    #D  O  B
+    #   C
+    O = occ.addPoint(0, 0, 0)
+    A = occ.addPoint(0, radius, 0)
+    B = occ.addPoint(radius, 0, 0)
+    C = occ.addPoint(0, -radius, 0)
+    D = occ.addPoint(-radius, 0, 0)
+    
+    lines = []
+    for (P, Q) ∈ ((A, B), (B, C), (C, D), (D, A))
+        push!(lines, occ.addCircleArc(P, O, Q))
+    end
+
+    loop = occ.addCurveLoop(lines)
+    surf = occ.addPlaneSurface([loop])
+    occ.synchronize()
+
+    names = ("n", "e", "s", "w")
+    for (tag, (point, name)) ∈ enumerate(zip((A, B, C, D), names))
+        point_group = model.addPhysicalGroup(0, [point], tag)
+        gmsh.model.setPhysicalName(0, point_group, name)
+    end
+
+    surf_group = model.addPhysicalGroup(2, [surf], 1)
+    gmsh.model.setPhysicalName(2, surf_group, "surface")
+
+    names = ("ne", "se", "sw", "nw")
+    for (tag, (line, name)) ∈ enumerate(zip(lines, names))
+        line_group = model.addPhysicalGroup(1, [line], tag)
+        gmsh.model.setPhysicalName(1, line_group, name)
+    end
+
+    normal = arc_normal([0., radius], [0., 0.], [radius, 0.])
+    normals = Dict("ne" => normal,
+                   "sw" => normal,
+                   "sw" => normal,
+                   "nw" => normal)
+
+    gmsh.model.occ.synchronize()
+
+    cell_type == :quad && gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    gmsh.model.mesh.generate(2)
+
+    if view
+        gmsh.fltk.initialize()
+        gmsh.fltk.run()
+    end
+
+    name = "$(save)_$(string(clscale)).msh"
+    gmsh.write(name)
+
+    gmsh.finalize()
+
+    (name, normals)
+end
+
+
+"""Disk  tri/quad cells
+  __3__
+4|     |2
+ |__1__|
+"""
+function disk_mesh(clscale::Real, cell_type::Symbol=:quad; radius0::Real=0.5, radius1::Real=1, angle=π/4, view::Bool=false, save::String="disk")
+    @assert clscale > 0 
+    @assert cell_type ∈ (:quad, :tri)
+    @assert !isempty(save)
+    @assert 0 < radius0 < radius1
+    @assert 0 < angle < π
+
+    !isdir(".msh_cache") && mkdir(".msh_cache")
+    save = joinpath(".msh_cache", save)
+
+    gmsh.initialize(["", "-clscale", string(clscale)])
+
+    model = gmsh.model
+    occ = model.occ
+
+    ϕ = (π-angle)/2
+
+    O = [0, 0.]
+    A = radius0*[-cos(ϕ), sin(ϕ)]
+    B = radius0*[cos(ϕ), sin(ϕ)]
+    C = radius1*[cos(ϕ), sin(ϕ)]
+    D = radius1*[-cos(ϕ), sin(ϕ)]
+
+    center = occ.addPoint(O[1], O[2], 0)
+    points = []
+    for p ∈ (A, B, C, D)
+        push!(points, occ.addPoint(p[1], p[2], 0))
+    end
+
+    lines = [occ.addCircleArc(points[1], center, points[2]),
+             occ.addLine(points[2], points[3]),
+             occ.addCircleArc(points[3], center, points[4]),
+             occ.addLine(points[4], points[1])] 
+
+    x = variables(:x, 1:2)
+    normals = Dict("bottom" => -arc_normal(A, O, B),
+                   "right" => seg_normal(C, B),
+                   "top"  => arc_normal(D, O, C),
+                   "left" => seg_normal(A, D))
+
+    loop = occ.addCurveLoop(lines)
+    surf = occ.addPlaneSurface([loop])
+    occ.synchronize()
+
+    names = ("ll", "lr", "ur", "ul")
+    for (tag, (point, name)) ∈ enumerate(zip(points, names))
+        point_group = model.addPhysicalGroup(0, [point], tag)
+        gmsh.model.setPhysicalName(0, point_group, name)
+    end
+
+    surf_group = model.addPhysicalGroup(2, [surf], 1)
+    gmsh.model.setPhysicalName(2, surf_group, "surface")
+
+    names = ("bottom", "right", "top", "left")
+    for (tag, (line, name)) ∈ enumerate(zip(lines, names))
+        line_group = model.addPhysicalGroup(1, [line], tag)
+        gmsh.model.setPhysicalName(1, line_group, name)
+    end
+
+    gmsh.model.occ.synchronize()
+
+    cell_type == :quad && gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    gmsh.model.mesh.generate(2)
+
+    if view
+        gmsh.fltk.initialize()
+        gmsh.fltk.run()
+    end
+
+    name = "$(save)_$(string(clscale)).msh"
+    gmsh.write(name)
+
+    gmsh.finalize()
+
+    (name, normals)
+end
 
 
 """[0, 1]^2 with tri/quad cells
@@ -77,7 +232,7 @@ function unit_square_mesh(clscale::Real, cell_type::Symbol=:quad; distance::Real
         lines = [!isodd(i) ? make_line(points[p], points[1 + p%4]) : make_arc(points[p], points[1 + p%4]) 
                  for (i, p) ∈ enumerate(eachindex(points))] 
 
-        x = Symbolics.variables(:x, 1:2)
+        x = variables(:x, 1:2)
         normals["bottom"] = -arc_normal(A, center, B)
         normals["right"] = seg_normal(C, B)
         normals["top" ] = arc_normal(D, center, C)
