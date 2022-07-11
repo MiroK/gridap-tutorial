@@ -79,7 +79,7 @@ true && begin
 
     uu0, pp0, ff0, hh0 = (compile(arg, x) for arg in (u0_, p0_, f0_, σ0_))
 
-    Dirichlet_tags = [5, 6, 7]
+    Dirichlet_tags = [5, 6, 7, 8]
 
     pdegree = 2 # Polynomial degree of FE space
 

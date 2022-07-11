@@ -4,6 +4,9 @@ using Symbolics
 x = Symbolics.variables(:x, 1:2)
 
 Inner(u::Vector{Num}, v::Vector{Num}) = u'*v
+Inner(A::Matrix{Num}, v::Vector{Num}) = Dot(A, v)
+Inner(v::Vector{Num}, A::Matrix{Num}) = Dot(v, A)
+
 Dot(A::Matrix{Num}, v::Vector{Num}) = A*v
 Dot(v::Vector{Num}, A::Matrix{Num}) = A'*v
 

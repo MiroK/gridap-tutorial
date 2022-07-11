@@ -1,4 +1,3 @@
-
 using Gridap
 using Gridap.Geometry
 using Printf

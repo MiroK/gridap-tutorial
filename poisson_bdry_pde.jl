@@ -8,6 +8,7 @@ using GridapGmsh
 
 include("GridapUtils.jl")
 using .GridapUtils
+using .GridapUtils: Dot, Inner
 using Symbolics
 
 x = Symbolics.variables(:x, 1:2)
@@ -21,9 +22,14 @@ f0 = Div(σ0)
 nΓ = Vector{Num}([0, -1])
 p = Inner(σ0, nΓ)
 
-u1 = sin(2*π*(x[1]))  # This is u0 at y = 0
+u1 = sin(2*π*(x[1] + x[2]))  # This is u0 at y = 0
+
+GradΓ(u::Num) = Grad(u) .- Inner(nΓ, Grad(u))*nΓ
+GradΓ(u::Vector{Num}) = Grad(u) .- Dot(nΓ, Grad(u))'*nΓ
+
+DivΓ(f::Vector{Num}) = tr(GradΓ(f))
 # NOTE: this should be in 1d
-f1 = Div(-kappa_*Grad(u1)) - p
+f1 = DivΓ(-kappa_*GradΓ(u1)) - p
 
 g = u0 - u1
 
@@ -37,7 +43,7 @@ f0_exact, f1_exact, g_exact = [compile(expr, x; kappa=kappa_val, kappa_=kappa__v
                                for expr in (f0, f1, g)]
 
 # Solve for resolution
-model_path, normals = GridapUtils.unit_square_mesh(0.25, :tri)
+model_path, normals = GridapUtils.unit_square_mesh(0.125, :tri)
 model = GmshDiscreteModel(model_path)
 
 Ω = Triangulation(model)
@@ -66,11 +72,13 @@ X = MultiFieldFESpace([UΩ, UΓ, P])
 #        the curved case
 a((u, u_, p), (v, v_, q)) = ∫((∇(u)⋅∇(v)))*dΩ +  ∫(kappa__val*(∇(u_)⋅∇(v_)))*dΓ + ∫((v-v_)*p)*dΓ + ∫((u-u_)*q)*dΓ
 
-time
+
 L((v, v_, q)) = ∫(f0_exact*v)*dΩ + ∫(f1_exact*v_)*dΓ + ∫(q*g_exact)*dΓ
 
+#@time A = assemble_matrix(a, X, Y)
+#@time b = assemble_vector(L, Y)
+
 op = AffineFEOperator(a, L, X, Y)
-println("ASS")
 ls = LUSolver()
 solver = LinearFESolver(ls)
 

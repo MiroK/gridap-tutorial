@@ -8,7 +8,7 @@ Solve on Ω the Poisson -Δ u = f0 with u = g0 on
 Dirichlet part of the boundary and Neumann bcs h0 on the rest.
 Dirichlet boundary conditions are enforced by the Nitsche method.
 """
-function poisson_solver(model, f0, g0, h0, Dirichlet_tags; pdegree, qdegree)
+function poisson_solver(model, f0, g0, h0, Dirichlet_tags; pdegree)
     @assert !isempty(Dirichlet_tags)
     # Allowed tags are ...
     all_tags = [5, 6, 7, 8]
@@ -31,16 +31,16 @@ function poisson_solver(model, f0, g0, h0, Dirichlet_tags; pdegree, qdegree)
     U = V  # TrialSpace
 
     dΩ = Measure(Ω, 2*(pdegree-1))
-    dΓD = Measure(ΓD, pdegree+qdegree)
-    dΓN = Measure(ΓN, pdegree+qdegree)
+    dΓD = Measure(ΓD, pdegree+pdegree)
+    dΓN = Measure(ΓN, pdegree+pdegree)
 
     # Nitsche 
     ν = get_normal_vector(ΓD)
-    γ = 10  # Nitsche penalty parameter 
+    γ = 10^pdegree  # Nitsche penalty parameter, will depend on order
 
     # And finally we need the notian of cell diameter
     h_ΓD = get_array(∫(1)*dΓD)
-    h = CellField(lazy_map(h->h, h_ΓD), ΓD)  # NOTE: this will also depend on the order
+    h = CellField(lazy_map(h->h, h_ΓD), ΓD) 
 
     aN(u, v) = ∫((γ/h)*u*v)*dΓD -∫(v*(∇(u)⋅ν))*dΓD - ∫(u*(∇(v)⋅ν))*dΓD 
     LN(v) = ∫((γ/h)*g0*v)*dΓD - ∫(g0*(∇(v)⋅ν))*dΓD 
@@ -62,8 +62,7 @@ begin
     f0(x;k=2, l=1) = ((k*π)^2 + (l*π)^2)*cos(k*π*x[1])*cos(l*π*x[2])
     h0(x) = 0
 
-    pdegree = 1  # Polynomial degree of FE space
-    qdegree = pdegree
+    pdegree = 2  # Polynomial degree of FE space
 
     whs = []
     errors_u, errors_p, hs, ndofsV, ndofsQ = [], [], [], [], []
@@ -74,10 +73,9 @@ begin
         partition = (n, n)
         model = CartesianDiscreteModel(domain, partition)
 
-        Dirichlet_tags = [5, 6, 7, 8]
+        Dirichlet_tags = [5, 6, 7]
         op = poisson_solver(model, f0, g0, h0, Dirichlet_tags;
-                            pdegree=pdegree,
-                            qdegree=qdegree)
+                            pdegree=pdegree)
 
         
         ls = LUSolver()
