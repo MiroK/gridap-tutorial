@@ -20,6 +20,87 @@ function arc_normal(A, C, B)
     n = [(x[1]-C[1])/r, (x[2]-C[2])/r] 
 end
 
+function cross2d(u::Vector{T}, v::Vector{S}) where S <: Real where T<: Real
+    @assert length(u) == length(v) == 2
+    u[2]*v[1] - u[1]*v[2]
+end
+
+"""
+Mesh for geometry in 2D marked by points
+"""
+function polygon_mesh(points::Matrix{T}, clscale::Real, cell_type::Symbol=:quad; view::Bool=false, save::String="polygon") where T<:Real
+    npoints, gdim = size(points)
+    @assert gdim == 2 && npoints >= 3
+    @assert !isapprox(norm(points[1]-points[end]), 0)
+    @assert clscale > 0 
+    @assert cell_type ∈ (:quad, :tri)
+    @assert !isempty(save)
+
+    A, B, C = points[1, :], points[2, :], points[3, :]
+    orientation = sign(cross2d(B-A, C-A))
+    for i ∈ 2:(npoints-2)
+        A, B, C = points[i, :], points[i+1, :], points[i+2, :]
+        @assert orientation == sign(cross2d(B-A, C-A))
+    end
+
+    !isdir(".msh_cache") && mkdir(".msh_cache")
+    save = joinpath(".msh_cache", save)
+
+    gmsh.initialize(["", "-clscale", string(clscale)])
+
+    model = gmsh.model
+    occ = model.occ
+
+    points = [occ.addPoint(points[i, 1], points[i, 2], 0) for i ∈ 1:npoints]
+    lines = [occ.addLine(points[i], points[1 + i%npoints]) for i ∈ eachindex(points)]
+
+    loop = occ.addCurveLoop(lines)
+    surf = occ.addPlaneSurface([loop])
+    occ.synchronize()
+
+    for (tag, point) ∈ enumerate(points)
+        point_group = model.addPhysicalGroup(0, [point], tag)
+        name = "v"*string(tag)
+        gmsh.model.setPhysicalName(0, point_group, name)
+    end
+
+    surf_group = model.addPhysicalGroup(2, [surf], 1)
+    gmsh.model.setPhysicalName(2, surf_group, "surface")
+
+    normals = Dict{String, Vector{Num}}()
+    for (tag, line) ∈ enumerate(lines)
+        line_group = model.addPhysicalGroup(1, [line], tag)
+
+        up, (v2id, v1id) = gmsh.model.getAdjacencies(1, tag)
+        
+        name = "l"*string(v1id)*"_"*string(v2id)
+        gmsh.model.setPhysicalName(1, line_group, name)
+
+        v1 = gmsh.model.getValue(0, v1id, [])
+        v2 = gmsh.model.getValue(0, v2id, [])
+        
+        n = seg_normal(v1[1:end-1], v2[1:end-1])
+        normals[name] = n
+    end
+
+    gmsh.model.occ.synchronize()
+
+    cell_type == :quad && gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    gmsh.model.mesh.generate(2)
+
+    if view
+        gmsh.fltk.initialize()
+        gmsh.fltk.run()
+    end
+
+    name = "$(save)_$(string(clscale)).msh"
+    gmsh.write(name)
+
+    gmsh.finalize()
+
+    (name, normals)
+end
+
 
 """Mesh a circle of radius r and center (0, 0)"""
 function circle_mesh(clscale::Real, cell_type::Symbol=:quad; radius::Real=1, view::Bool=false, save::String="circle")

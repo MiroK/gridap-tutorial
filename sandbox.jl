@@ -2,7 +2,7 @@ using Gridap
 using GridapGmsh
 
 include("GridapUtils.jl")
-using .GridapUtils: unit_square_mesh, split_square_mesh, compile, disk_mesh
+using .GridapUtils: unit_square_mesh, split_square_mesh, compile, disk_mesh, polygon_mesh
 using Symbolics
 
 """
@@ -151,7 +151,9 @@ end
 true && begin
     # mesh_path, normals = unit_square_mesh(0.05, :tri; distance=2)
     # mesh_path, normals = circle_mesh(0.05, :tri; radius=2)
-    mesh_path, normals = disk_mesh(0.05, :tri; radius0=1, radius1=2)
+    # mesh_path, normals = disk_mesh(0.05, :tri; radius0=1, radius1=2)
+    polygon = [0 0.; 1 0; 1 2; 0 1]
+    mesh_path, normals = polygon_mesh(polygon, 0.05, :tri)
 
     model = GmshDiscreteModel(mesh_path)
     x = Symbolics.variables(:x, 1:2)
