@@ -148,7 +148,7 @@ false && begin
     Plots.heatmap(image)
 end
 
-true && begin
+false && begin
     # mesh_path, normals = unit_square_mesh(0.05, :tri; distance=2)
     # mesh_path, normals = circle_mesh(0.05, :tri; radius=2)
     # mesh_path, normals = disk_mesh(0.05, :tri; radius0=1, radius1=2)
@@ -173,4 +173,63 @@ true && begin
         end
         @show (tag, error, agreed)
     end 
+end
+
+
+foo = begin 
+    mesh_path, normals = split_square_mesh(0.1, :tri; distance=Inf, offset=0.0)
+    model = GmshDiscreteModel(mesh_path)
+    
+    Ω = Triangulation(model)
+    Ω₁ = Triangulation(model, tags="top_surface")
+    Ω₂ = Triangulation(model, tags="bottom_surface")
+    Γ = InterfaceTriangulation(Ω₁, Ω₂)
+    #Γ = BoundaryTriangulation(model, tags=["interface"])
+    
+    dΩ₁ = Measure(Ω₁, 2)
+    dΩ₂ = Measure(Ω₂, 2)
+    dΓ = Measure(Γ, 8)
+    
+    elm = ReferenceFE(lagrangian, Float64, 1)
+    
+    # 2d 
+    V1 = TestFESpace(Ω₁, elm; conformity=:H1)
+    U1 = TrialFESpace(V1)
+
+    V2 = TestFESpace(Ω₂, elm; conformity=:H1)
+    U2 = TrialFESpace(V2)
+    # Multiplier
+    Q = TestFESpace(Γ, elm; conformity=:H1)
+    P = TrialFESpace(Q)
+
+    #a((u, u_, p), (v, v_, q)) = ∫((v-v_)*p)*dΓ + ∫((u-u_)*q)*dΓ
+
+    jumpΓ(u, v) = u.⁺ - v.⁻
+
+    a((u, u_, p), (v, v_, q)) = ∫(jumpΓ(v, v_)*p)*dΓ + ∫(jumpΓ(u, u_)*q)*dΓ
+
+    #a1((u, u_, p), (v, v_, q)) = ∫((v)*p)*dΓ + ∫((u)*q)*dΓ
+    #a2((u, u_, p), (v, v_, q)) = ∫((v_)*p)*dΓ + ∫((u_)*q)*dΓ
+
+    b((u, u_), (v, v_)) = ∫((v-v_))*dΓ + ∫((u-u_))*dΓ
+
+    coefs = rand(6)
+    u1(x) = coefs[1]*x[1] + coefs[2]*x[2]
+    u2(x) = coefs[3]*x[1] + coefs[4]*x[2]
+    p(x) = coefs[5]*x[1] + coefs[6]*x[2]
+
+    du(x) = (u1(x) - u2(x))
+    du_p(x) = du(x)*p(x)
+    
+    da(du_p, dv_q) = ∫(du_p)*dΓ + ∫(dv_q)*dΓ
+
+    u1h = interpolate_everywhere(u1, V1)
+    u2h = interpolate_everywhere(u2, V2)
+    ph = interpolate_everywhere(p, Q)
+
+    want_a = sum(da(du_p, du_p))
+
+    has_a = sum(a((u1h, u2h, ph), (u1h, u2h, ph)))
+  
+    @show (want_a, has_a, abs(has_a - want_a))
 end
