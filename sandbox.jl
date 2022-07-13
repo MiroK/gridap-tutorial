@@ -177,7 +177,7 @@ end
 
 
 foo = begin 
-    mesh_path, normals = split_square_mesh(0.1, :tri; distance=Inf, offset=0.0)
+    mesh_path, normals = split_square_mesh(1, :tri; distance=Inf, offset=0.0)
     model = GmshDiscreteModel(mesh_path)
     
     Ω = Triangulation(model)
@@ -193,11 +193,11 @@ foo = begin
     elm = ReferenceFE(lagrangian, Float64, 1)
     
     # 2d 
-    V1 = TestFESpace(Ω₁, elm; conformity=:H1)
-    U1 = TrialFESpace(V1)
+    V1 = TestFESpace(Ω₁, elm; conformity=:H1)#, dirichlet_tags=["top"])
+    U1 = TrialFESpace(V1)#, 1)
 
-    V2 = TestFESpace(Ω₂, elm; conformity=:H1)
-    U2 = TrialFESpace(V2)
+    V2 = TestFESpace(Ω₂, elm; conformity=:H1)#, dirichlet_tags=["bottom"])
+    U2 = TrialFESpace(V2)#, 2)
     # Multiplier
     Q = TestFESpace(Γ, elm; conformity=:H1)
     P = TrialFESpace(Q)
@@ -232,4 +232,41 @@ foo = begin
     has_a = sum(a((u1h, u2h, ph), (u1h, u2h, ph)))
   
     @show (want_a, has_a, abs(has_a - want_a))
+
+    X = MultiFieldFESpace([V1, V2])
+    Y = MultiFieldFESpace([U1, U2])
+
+    #aa((u1, u2), (v1, v2)) = ∫(u1.⁺*v1.⁺)*dΓ + ∫(u1*v1)*dΩ₁ + ∫(u2*v2)*dΩ₂
+    κ, κ_ = 1, 1
+    aa((u1, u2), (v1, v2)) = (∫(κ*(∇(u1)⋅∇(v1)))*dΩ₁ +  
+                             ∫(κ_*(∇(u2)⋅∇(v2)))*dΩ₂ +
+                             ∫(jumpΓ(v1, v2)*jumpΓ(u1, u2))*dΓ)
+
+    assemble_matrix(aa, X, Y)
+
+    coef(x) = 2*x[1]+3*x[2]
+    foo(x) = 2*x[1]+x[2]
+    arg(x) = coef(x)*foo(x)
+    dLL = ∫(arg)*dΓ
+
+    want = sum(dLL)
+
+    coef_ = interpolate_everywhere(coef, V2)
+
+    LL((v1, v2)) = ∫(coef_.⁻*v2.⁻)*dΓ
+    # Can we have +, - here?
+    vec = assemble_vector(LL, Y)
+
+    lasts = get_free_dof_ids(Y).lasts
+    V1_dofs = 1:lasts[1]
+    V2_dofs = (lasts[1]+1):lasts[2]
+    
+    fooh = interpolate_everywhere(foo, V2).free_values
+
+    have = sum(fooh .* vec[V2_dofs])
+    @show (want, have)
+    #op = AffineFEOperator(aa, LL, X, Y)
+    # Orientation
 end
+
+# Figure out orientations
