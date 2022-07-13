@@ -1,5 +1,6 @@
 using LinearAlgebra
 using Gridap.Geometry: CompositeTriangulation
+using Gridap
 
 
 """Segment mesh in Xd"""
@@ -151,38 +152,78 @@ end
 
 # -------------------
 
-vertices = [0 0;
-            1 0.;
-            1 1.;
-            0 1.]'
+function min_facet_area(mesh::Triangulation)
+    Γ = BoundaryTriangulation(mesh)
+    dΓ = Measure(Γ, 1)
 
-vertices = collect(vertices)
-topology = [[1, 2], 
-            [2, 3],
-            [3, 4],
-            [4, 1],
-            [1, 3]]
+    γ = SkeletonTriangulation(mesh)
+    dγ = Measure(γ, 1)
 
-mesh = SegmentMesh(vertices, topology)
-Γ = Curve(mesh)
+    hs = min(minimum(get_array(∫(1)*dΓ)),
+             minimum(get_array(∫(1)*dγ)))
+end
 
-curve_distance(Γ, [0.4, 0.5])
-#curve_distance(curve, rand(2, 4))
+begin
+    #= # Simple shape
+    vertices = [0 0;
+                1 0.;
+                0.5 0.5;
+                0.5 0.75;
+                0.25 0.6]'
 
-# Define the curve from some edges
-model = CartesianDiscreteModel((0, 1, 0, 1), (64, 64))
-Ω = Triangulation(model)
-mesh_ = BoundaryTriangulation(Ω)
-Γ = Curve(mesh_)
+    vertices = collect(vertices)
+    topology = [[1, 3], 
+                [2, 3],
+                [3, 4],
+                [4, 5]]
+    =#
 
-# Now the mesh on which we want to evl the distance field
-model = CartesianDiscreteModel((0, 1, 0, 1), (100, 100))
-Ω = Triangulation(model)
-# Let's see about it in P1 space
-Velm = ReferenceFE(lagrangian, Float64, 1)
-V = TestFESpace(Ω, Velm; conformity=:H1)
+    # Stress test: computing distance from a collection of segments 
+    # representing circle
+    npts = 128
+    θ = collect(range(0, 2π, npts+1))[1:end-1]
+    # As distance from circle at 0.5, 0.5 with radius
+    ρ = 0.25
+    x₀, x₁ = 0.5, 0.5
+    vertices = hcat(x₀ .+ ρ*sin.(θ), x₁ .+ ρ*cos.(θ))
 
-distΓ(x) = curve_distance(Γ, x)
+    vertices = collect(vertices')
+    topology = [[i, 1+i%npts] for i ∈ 1:npts]
 
-f = interpolate_everywhere(distΓ, V)
-writevtk(Ω, "dist", order=1, cellfields=["dist" => f])
+    mesh = SegmentMesh(vertices, topology)
+    Γ = Curve(mesh)
+
+    # Pick up the curve from marked facets in the mesh; here 
+    # we take marking as the boundary
+    #=
+    model = CartesianDiscreteModel((0, 1, 0, 1), (64, 64))
+    Ω = Triangulation(model)
+    mesh_ = BoundaryTriangulation(Ω)
+    Γ = Curve(mesh_)=#
+
+    ncells = 256
+    # Now the mesh on which we want to evl the distance field
+    model = CartesianDiscreteModel((0, 1, 0, 1), (ncells, ncells))
+    Ω = Triangulation(model)
+    # Let's see about it in P0 space
+    Velm = ReferenceFE(lagrangian, Float64, 0)
+    V = TestFESpace(Ω, Velm; conformity=:L2)
+
+    # Some notion of mesh resolution
+    distΓ(x) = curve_distance(Γ, x)
+    
+    dx = min_facet_area(Ω)
+    maskΓ(x) = distΓ(x) > dx ? 0 : 1
+
+    f = interpolate_everywhere(distΓ, V)
+    mask = interpolate_everywhere(maskΓ, V)
+
+    writevtk(Ω, "dist", order=1, cellfields=["dist" => f,
+                                             "mask" => mask])
+
+    true_distΓ(x) = abs(sqrt((x[1]-x₀)^2 + (x[2]-x₁)^2)-ρ)
+    dΩ = Measure(Ω, 5)
+    ef = f - true_distΓ
+    L = ∫(ef*ef)*dΩ
+    @show sqrt(sum(L))
+end

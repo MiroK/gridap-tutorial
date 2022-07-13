@@ -145,5 +145,3 @@ end
 #"u" => interpolate_everywhere(data.u0_exact, VΩ)])
 #writevtk(Γ, "oneD_sol", order=1, cellfields=["uh_" => uh_,
 #"u" => interpolate_everywhere(data.u1_exact, VΓ)]) 
-
-

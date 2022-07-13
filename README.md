@@ -19,3 +19,7 @@ demos, i.e. multiphysics problems with interface coupling.
 - [ ] Setup for iterative solvers (in PETSc)
 - [ ] Setup for eigenvalue computations (fractional guys)
 
+
+## TODO other
+- [ ] Equivalent of `tabulate_dof_coordinates`
+- [ ] (Maybe) avoid interpolation when making distance functions
