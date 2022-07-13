@@ -44,11 +44,12 @@ function solve_problem(model_path, data)
     Y = MultiFieldFESpace([VΩ, VΓ, Q])
     X = MultiFieldFESpace([UΩ, UΓ, P])
 
-    # FIXME: convergence all dirichlet, Neumann top
-    #        what if the Γ edge is tilted <- mms
-    #        the curved case
-    a((u, u_, p), (v, v_, q)) = ∫((data.kappa*∇(u)⋅∇(v)))*dΩ +  ∫(data.kappa_*(∇(u_)⋅∇(v_)))*dΓ + ∫((v-v_)*p)*dΓ + ∫((u-u_)*q)*dΓ
+    kappa, kappa_ = data.kappa, data.kappa_
+    @assert isa(kappa, Number) && isa(kappa_, Number)
+    κ = CellField(kappa, Ω)
+    κ_ = CellField(kappa_, Γ)
 
+    a((u, u_, p), (v, v_, q)) = ∫((κ*∇(u)⋅∇(v)))*dΩ +  ∫(κ_*(∇(u_)⋅∇(v_)))*dΓ + ∫((v-v_)*p)*dΓ + ∫((u-u_)*q)*dΓ
 
     L((v, v_, q)) = ∫(data.f0_exact*v)*dΩ + ∫(data.f1_exact*v_)*dΓ + ∫(q*data.g_exact)*dΓ
 
@@ -98,13 +99,14 @@ f1 = DivΓ(-kappa_*GradΓ(u1)) - p
 g = u0 - u1
 
 # Specify for data
-kappa_val, kappa__val = 2, 3
+kappa_val, kappa__val = 1, 2
 
+# With defaults
 u0_exact, u1_exact, p_exact = [compile(expr, x; kappa=kappa_val, kappa_=kappa__val)
-                            for expr in (u0, u1, p)]
+                               for expr in (u0, u1, p)]
 
 f0_exact, f1_exact, g_exact = [compile(expr, x; kappa=kappa_val, kappa_=kappa__val)
-                            for expr in (f0, f1, g)]
+                               for expr in (f0, f1, g)]
 
 data = (Γ_tag=Γ_tag,
         VΩ_Dtags=VΩ_Dtags,
