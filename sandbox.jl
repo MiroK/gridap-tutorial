@@ -186,7 +186,7 @@ foo = begin
     Γ = InterfaceTriangulation(Ω₁, Ω₂)
     #Γ = BoundaryTriangulation(model, tags=["interface"])
     
-    dΩ₁ = Measure(Ω₁, 2)
+    dΩ₁ = Measure(Ω₁, 2) 
     dΩ₂ = Measure(Ω₂, 2)
     dΓ = Measure(Γ, 8)
     
