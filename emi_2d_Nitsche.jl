@@ -25,10 +25,8 @@ using .GridapUtils
 
 
 """
-The solution approach to EMI equations where ϵ > 0 is assumed and 
-we use equation (1) to deal with the surface terms arrising in integration 
-by parts of -∇⋅(κᵢ∇uᵢ) = fᵢ. In particular, the EMI problem is solved for 
-only the potentials uᵢ.
+The solution approach to EMI equations where ϵ = 0 and so we have 
+conservation of mass
 """
 function emi(model, parameters, data)
     # NOTE: the tags here have a specific model/tagging in mind. It
@@ -57,21 +55,32 @@ function emi(model, parameters, data)
     X = MultiFieldFESpace([U1, U2])
     
     κ, κ_ = parameters.κ0, parameters.κ1
-    # NOTE: CellFields seem necessary to make the integration work proper 
-    # on Γ. Otheriwse restrictions are needed
-    ϵ = CellField(parameters.ϵ, Γ)
-    
     jumpΓ(u, v) = u.⁺ - v.⁻
+
+    # Vars needed for surface coupling via Nitsche
+    γ = 20
+    nΓ = get_normal_vector(Γ)
+    # And finally we need the notion of cell diameter
+    h_Γ = get_array(∫(1)*dΓ)
+    h = CellField(lazy_map(h->h, h_Γ), Γ) 
+
+    # FIXME: can this be done nicer?
+    Κ = CellField(κ, Γ)
+    Κ_ = CellField(κ_, Γ)
 
     a((u1, u2), (v1, v2)) = (∫(κ*(∇(u1)⋅∇(v1)))*dΩ₁ +  
                              ∫(κ_*(∇(u2)⋅∇(v2)))*dΩ₂ +
-                             ∫((1/ϵ)*jumpΓ(v1, v2)*jumpΓ(u1, u2))*dΓ)
+                             ∫((0.5*(-Κ.⁺*∇(u1.⁺)⋅nΓ.⁺-Κ_.⁻*∇(u2.⁻)⋅nΓ.⁻))*jumpΓ(v1, v2))*dΓ +
+                             ∫((0.5*(-Κ.⁺*∇(v1.⁺)⋅nΓ.⁺-Κ_.⁻*∇(v2.⁻)⋅nΓ.⁻))*jumpΓ(u1, u2))*dΓ +
+                             ∫((γ/h)*jumpΓ(v1, v2)*jumpΓ(u1, u2))*dΓ)
 
     gu = CellField(data.gu, Γ)
     gσ = CellField(data.gσ, Γ)
     
-    L((v1, v2)) = (∫(data.f0*v1)*dΩ₁ + ∫((1/ϵ)*gu*v1.⁺)*dΓ +
-                   ∫(data.f1*v2)*dΩ₂ - ∫((1/ϵ)*gu*v2.⁻)*dΓ - ∫(gσ*v2.⁻)*dΓ)
+    L((v1, v2)) = (∫(data.f0*v1)*dΩ₁ + ∫(data.f1*v2)*dΩ₂ 
+                    + ∫((γ/h)*gu*jumpΓ(v1, v2))*dΓ
+                    + ∫((0.5*(-Κ.⁺*∇(v1.⁺)⋅nΓ.⁺-Κ_.⁻*∇(v2.⁻)⋅nΓ.⁻))*gu)*dΓ
+                    - ∫(gσ*(0.5*(v1.⁺+v2.⁻)))*dΓ)
     
     op = AffineFEOperator(a, L, X, Y)
     
@@ -88,10 +97,10 @@ end
 # where the interca will be the line y = 0.5
 x = Symbolics.variables(:x, 1:2)
 # NOTE: I switched to 0 based indexing here
-@variables κ0, κ1, ϵ
+@variables κ0, κ1
 
 # Top
-u0 = sin(π*(x[1]+x[2]))
+u0 = sin(π*(x[1]+x[2]))  # u0 = sin(π*(x[1]))
 σ0 = -κ0*Grad(u0)
 f0 = Div(σ0)
 # The domain is above y = 0.5 so normal is
@@ -100,17 +109,17 @@ nΓ0 = Vector{Num}([0, -1])
 p0 = Inner(σ0, nΓ0)
 
 # Bottom
-u1 = sin(2*π*x[1]*(x[2]-x[1]))
+u1 = sin(2*π*x[1]*(x[2]-x[1]))  #u1 = sin(π*(2*x[1]))
 σ1 = -κ1*Grad(u1)
 f1 = Div(σ1)
 # We look up
 nΓ1 = Vector{Num}([0, 1])
 # Interface coupling
 gσ = p0 + Inner(σ1, nΓ1)
-gu = u0 - u1 - ϵ*p0
+gu = u0 - u1
 
 # Specify for data
-params = Dict(:κ0 => 3, :κ1 => 2, :ϵ => 0.5)
+params = Dict(:κ0 => 2, :κ1 => 1)
 
 u0_exact, u1_exact = [compile(expr, x; params...) for expr in (u0, u1)]
 
@@ -143,11 +152,13 @@ for n ∈ 1:5
 
     push!(sizes, [minimum(get_mesh_sizes(Ω0)), minimum(get_mesh_sizes(Ω1))])
     push!(errors, [e0, e1])
-
+    
+    dofs = [length(get_free_dof_values(uh0)), length(get_free_dof_values(uh1))]
+    
     rates = length(errors) == 1 ? [-1, -1] : log.(errors[end]./errors[end-1])./log.(sizes[end]./sizes[end-1])
 
-    table = zip(sizes[end], errors[end], rates)
+    table = zip(sizes[end], errors[end], rates, dofs)
     for (i, row) in enumerate(table)
-        @printf "\x1B[35m h = %.2E | |u-uh| = %.2E rate = %.2f\n\033[0m" row...
+        @printf "\x1B[35m h = %.2E | |u-uh| = %.2E rate = %.2f| dofs = %d \n\033[0m" row...
     end
 end
