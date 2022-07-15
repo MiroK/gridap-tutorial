@@ -29,7 +29,7 @@ using .GridapUtils
 The solution approach to EMI equations where ϵ >= 0 is assumed. We consider 
 mixed form for one of the Poisson equations while keeping primal in the other. 
 We end up with a perturbed saddle point problem. The flux condition on σ₁⋅ν₁ 
-is here enforced strongly. 
+is here enforced by Nitsche method. 
 """
 function emi(model, parameters, data)
     # NOTE: the tags here have a specific model/tagging in mind. It
@@ -55,12 +55,12 @@ function emi(model, parameters, data)
     
     Γ1 = BoundaryTriangulation(Ω₁, tags=pressure_tags1)
     # 
-    δS1 = TestFESpace(Ω₁, S1elm; conformity=:Hdiv, dirichlet_tags=flux_tags1)
+    δS1 = TestFESpace(Ω₁, S1elm; conformity=:Hdiv)
     δV1 = TestFESpace(Ω₁, V1elm; conformity=:L2)
     nΓ1 = get_normal_vector(Γ1)
     dΓ1 = Measure(Γ1, 2)
     
-    S1, V1 = TrialFESpace(δS1, data.σ0), TrialFESpace(δV1)
+    S1, V1 = TrialFESpace(δS1), TrialFESpace(δV1)
     
     # In the second domain we will have primal poisson (with strong bcs)
     V2elm = ReferenceFE(lagrangian, Float64, 1)
@@ -76,11 +76,19 @@ function emi(model, parameters, data)
     # on Γ. Otheriwse restrictions are needed
     ϵ = CellField(parameters.ϵ, Γ)
     
+    ΓN = BoundaryTriangulation(Ω₁, tags=flux_tags1)
+    nΓN = get_normal_vector(ΓN)
+    dΓN = Measure(ΓN, 2)
+    # Nitsche auxiliary vars
+    γΓN = 20
+    hΓN = CellField(lazy_map(h->h, get_array(∫(1)*dΓN)), ΓN) 
 
     a((s1, u1, u2), (t1, v1, v2)) = (
         ∫((1/κ)*(s1⋅t1))*dΩ₁ + ∫(ϵ*(s1.⁺⋅nΓ.⁺)*(t1.⁺⋅nΓ.⁺))*dΓ - ∫(u1*(∇⋅t1))*dΩ₁ + ∫(u2.⁻*(t1.⁺⋅nΓ.⁺))*dΓ 
         - ∫(v1*(∇⋅s1))*dΩ₁
         + ∫(v2.⁻*(s1.⁺⋅nΓ.⁺))*dΓ                                                  - ∫(κ_*(∇(u2)⋅∇(v2)))*dΩ₂
+        # Now the Nitsche terms
+        + ∫(u1*(t1⋅nΓN))*dΓN + ∫(v1*(s1⋅nΓN))*dΓN + ∫((γΓN/hΓN)*(t1⋅nΓN)*(s1⋅nΓN))*dΓN
     )
 
     gu = CellField(data.gu, Γ)
@@ -90,6 +98,8 @@ function emi(model, parameters, data)
          ∫(-gu*(t1.⁺⋅nΓ.⁺))*dΓ - ∫(data.u0*(t1⋅nΓ1))*dΓ1 
         -∫(data.f0*v1)*dΩ₁ 
         -∫(data.f1*v2)*dΩ₂ + ∫(gσ*v2.⁻)*dΓ
+        # Now the Nitsche terms
+        + ∫(v1*(data.σ0⋅nΓN))*dΓN + ∫((γΓN/hΓN)*(t1⋅nΓN)*(data.σ0⋅nΓN))*dΓN
     )
     
     op = AffineFEOperator(a, L, X, δX)
