@@ -1,3 +1,8 @@
+# TODO: mms where 1) Dirichlet on 1d and ∂Ω
+#                 2) Dirichlet on 1d meet Diriclet on ∂Ω but rest is Neumann
+#
+# See about dofmap
+
 using Gridap
 using GridapGmsh
 
@@ -5,19 +10,20 @@ include("GridapUtils.jl")
 using .GridapUtils: unit_square_mesh, split_square_mesh
 
 
-model = GmshDiscreteModel(split_square_mesh(0.05, :tri; distance=2, offset=-0.2))
+model = GmshDiscreteModel(split_square_mesh(0.1, :tri; distance=Inf, offset=0.0))
 
-Ω = Triangulation(model)
-Ω₁ = Triangulation(model, tags=["top_surface"])
-Ω₂ = Triangulation(model, tags=["bottom_surface"])
-Γ = BoundaryTriangulation(model, tags=["interface"])
+function twoDoneD(model, sources, Dbdry_data, Nbdry_data, Ibdry_data)
+    Ω = Triangulation(model)
+    Ω₁ = Triangulation(model, tags=["top_surface"])
+    Ω₂ = Triangulation(model, tags=["bottom_surface"])
+    Γ = BoundaryTriangulation(model, tags=["interface"])
 
-dΩ = Measure(Ω, 2)
-dΩ₁ = Measure(Ω₁, 2)
-dΩ₂ = Measure(Ω₂, 2)
-dΓ = Measure(Γ, 2)
+    dΩ = Measure(Ω, 2)
+    dΩ₁ = Measure(Ω₁, 2)
+    dΩ₂ = Measure(Ω₂, 2)
+    dΓ = Measure(Γ, 2)
 
-elm = ReferenceFE(lagrangian, Float64, 1)
+    elm = ReferenceFE(lagrangian, Float64, 1)
 
 # 2d 
 VΩ = TestFESpace(Ω, elm; conformity=:H1, dirichlet_tags=["top", "bottom"])
@@ -60,3 +66,8 @@ u = sqrt(sum(∫(abs(uh))*dΩ))
 v = sqrt(sum(∫(abs(uh_))*dΓ))
 @show (u, v)
 #writevtk(get_triangulation(uh), "stokes_sol", order=1, cellfields=["uh" => uh, "ph" => ph])
+end
+
+true && begin
+    
+end

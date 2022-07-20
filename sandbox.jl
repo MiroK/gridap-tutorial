@@ -2,8 +2,14 @@ using Gridap
 using GridapGmsh
 
 include("GridapUtils.jl")
-using .GridapUtils: unit_square_mesh, split_square_mesh, compile, disk_mesh, polygon_mesh
+using .GridapUtils: unit_square_mesh, 
+                    split_square_mesh,
+                    compile, 
+                    disk_mesh, 
+                    polygon_mesh,
+                    GraphMesh
 using Symbolics
+
 
 """
 Can we have boundary of a boundary?
@@ -112,6 +118,7 @@ function imageperm(mesh)
     reshape(idx, dy)
 end
 
+
 function uniform_grid(x; digits=14)
     x = round.(x; digits=digits)
     # ccc  abc
@@ -130,6 +137,33 @@ function uniform_grid(x; digits=14)
     return (length(indices), length(diff0)+1)
 end
 
+# Graph distance computations
+begin
+    model_path, normals = split_square_mesh(0.2; offset=0.2)
+    model = GmshDiscreteModel(model_path)
+
+    writevtk(model, "test_model")
+
+    Ω = Triangulation(model)
+    Γ = BoundaryTriangulation(Ω, tags=["interface"])
+    
+    # We want to represent Γ as a graph and compute distances between marked points on it
+    G = GraphMesh(Γ)
+    # One thing that remains is that the tags for points are defined with respect to parent 
+    # mesh Ω so it is some work to get them
+    D_tags = ["iface_left", "iface_right"]
+
+    fb = get_face_labeling(Ω)
+
+    #V = TestFESpace(Γ, ReferenceFE(lagrangian, VectorValue{2, Float64}, 1), dirichlet_tags=D_tags)
+    #U = TrialFESpace(V, identity)
+    
+    #D_locations = reshape(get_dirichlet_dof_values(U), (2, length(D_tags)))
+    #Dict(tag => loc for (tag, loc) ∈ zip(D_tags, eachcol(D_locations)))
+end
+
+
+# Image ordering
 false && begin
     using Plots    
 
@@ -148,6 +182,8 @@ false && begin
     Plots.heatmap(image)
 end
 
+
+# Figure out orientation in our predefined geometries
 false && begin
     # mesh_path, normals = unit_square_mesh(0.05, :tri; distance=2)
     # mesh_path, normals = circle_mesh(0.05, :tri; radius=2)
@@ -176,7 +212,8 @@ false && begin
 end
 
 
-foo = begin 
+# Issues with LM mixed dim
+false && begin 
     mesh_path, normals = split_square_mesh(1, :tri; distance=Inf, offset=0.0)
     model = GmshDiscreteModel(mesh_path)
     
@@ -268,5 +305,3 @@ foo = begin
     #op = AffineFEOperator(aa, LL, X, Y)
     # Orientation
 end
-
-# Figure out orientations

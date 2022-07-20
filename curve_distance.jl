@@ -1,6 +1,7 @@
 using LinearAlgebra
 using Gridap.Geometry: CompositeTriangulation
 using Gridap
+using Graphs, SimpleWeightedGraphs
 
 
 """Segment mesh in Xd"""
@@ -102,18 +103,29 @@ end
 
 """Construct SegmentMesh from Boundary of 2d mesh"""
 function SegmentMesh(mesh::CompositeTriangulation)
+
+    cells, pv_to_v = compute_embedding(mesh)
+
+    parent_nodes = mesh.dtrian.trian.grid.parent.node_coordinates
+    nodes = Vector{eltype(parent_nodes)}(undef, length(pv_to_v))
+    for (v, pv) ∈ enumerate(pv_to_v)
+        nodes[v] = parent_nodes[pv]
+    end
+    SegmentMesh(vecvec_to_mat(nodes), cells)
+end 
+
+
+"""How we view entities of mesh from the segment mesh"""
+function compute_embedding(mesh::CompositeTriangulation)
     # We have a mesh here as a view of facets of parent
     parent_edges = mesh.dtrian.trian.grid.parent.cell_node_ids
-    parent_nodes = mesh.dtrian.trian.grid.parent.node_coordinates
     cell_to_parent_cell = mesh.dtrian.trian.grid.cell_to_parent_cell
 
-    nodes = Vector{eltype(parent_nodes)}()
     # Cell 2 vertex in the local numbering
     cells = Vector{Vector{Int}}()
     resize!(cells, length(cell_to_parent_cell))
     # Mapping of the vertices
     pv_to_v = Dict{Int, Int}()
-
     for (cell, parent_cell) ∈ enumerate(cell_to_parent_cell)
         pvs = parent_edges[parent_cell]  # These are parent vertex indices
 
@@ -123,8 +135,7 @@ function SegmentMesh(mesh::CompositeTriangulation)
             pv = pvs[i]
             v = -1
             if pv ∉ keys(pv_to_v)
-                push!(nodes, parent_nodes[pv])
-                v = length(nodes)
+                v = length(pv_to_v) + 1
                 pv_to_v[pv] = v 
                 vs[i] = v
             else
@@ -133,9 +144,14 @@ function SegmentMesh(mesh::CompositeTriangulation)
         end
         cells[cell] = vs
     end
-
-    SegmentMesh(vecvec_to_mat(nodes), cells)
+    # Since pv_to_v is one-to-one
+    vertices = Vector{Int}(undef, length(pv_to_v))
+    for (pv, v) ∈ pv_to_v
+        vertices[v] = pv
+    end
+    (cells, vertices)
 end
+
 
 
 # Gridap interoperaobity
@@ -163,7 +179,61 @@ function min_facet_area(mesh::Triangulation)
              minimum(get_array(∫(1)*dγ)))
 end
 
-begin
+
+"""Represent line mesh as a weighted graph"""
+function GraphMesh(mesh::SegmentMesh)
+    nvtx = length(mesh.vertices)
+    G = SimpleWeightedGraph(nvtx)
+    for (v1, v2) ∈ mesh.topology
+        d = norm(mesh.vertices[:, v1] - mesh.vertices[:, v2])
+        # @show (v1, v2, d, mesh.vertices[:, v1], mesh.vertices[:, v2])
+        @assert d > 0
+        @assert add_edge!(G, v1, v2, d)
+    end
+    G
+end
+
+
+GraphMesh(mesh::CompositeTriangulation) = GraphMesh(SegmentMesh(mesh))
+
+
+# FIXME: make into a function
+begin 
+    model_path, normals = split_square_mesh(1., offset=0.2, distance=2)
+    model = GmshDiscreteModel(model_path)
+
+    writevtk(model, "test_model")
+
+    Ω = Triangulation(model)
+    Γ = BoundaryTriangulation(Ω, tags=["interface"])
+    dΓ = Measure(Γ, 1)
+    reference = sum(∫(1)*dΓ)
+
+    # We want to represent Γ as a graph and compute distances between marked points on it
+    G = GraphMesh(Γ)
+    # One thing that remains is that the tags for points are defined with respect to parent mesh 
+    fb = get_face_labeling(model)
+    point_tags = get_face_tag(fb, 0)
+    # Lookup in parent numbering (of Ω)
+    tag_l = get_tag_from_name(fb, "iface_left")
+    pidx_l = findfirst(x -> x == tag_l, point_tags)
+
+    tag_r = get_tag_from_name(fb, "iface_right")
+    pidx_r = findfirst(x -> x == tag_r, point_tags)
+    # Nowe we want to convert them to local numbering of Γ 
+    _, child_to_parent_vertex = compute_embedding(Γ)
+
+    cidx_l = findfirst(x -> x == pidx_l, child_to_parent_vertex)
+    cidx_r = findfirst(x -> x == pidx_r, child_to_parent_vertex)
+    # We can now query the graph
+    path = child_to_parent_vertex[enumerate_paths(dijkstra_shortest_paths(G, cidx_l), cidx_r)]
+    nodes = Ω.grid.node_coordinates   
+    distance = sum(norm(nodes[path[i]] .- nodes[path[i+1]]) for i ∈ 1:(length(path)-1))
+    @show (distance, reference)
+end
+
+
+false && begin
     #= # Simple shape
     vertices = [0 0;
                 1 0.;
@@ -199,7 +269,8 @@ begin
     model = CartesianDiscreteModel((0, 1, 0, 1), (64, 64))
     Ω = Triangulation(model)
     mesh_ = BoundaryTriangulation(Ω)
-    Γ = Curve(mesh_)=#
+    Γ = Curve(mesh_)
+    =#
 
     ncells = 256
     # Now the mesh on which we want to evl the distance field

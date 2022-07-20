@@ -47,12 +47,17 @@ export get_boundary_tags, get_mesh_sizes
 include("GridapGeometries.jl")
 
 export unit_square_mesh, split_square_mesh, circle_mesh, disk_mesh, polygon_mesh
-
 # -----------------------------------------------------------------------------
 
 include("GridapSym.jl")
 
 export Grad, Div, Curl, Rot, Dot, Inner, Sym, Skew
 export compile
+
+# -----------------------------------------------------------------------------
+
+include("curve_distance.jl")
+
+export SegmentMesh, GraphMesh, compute_embedding
 
 end
