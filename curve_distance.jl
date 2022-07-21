@@ -198,7 +198,7 @@ GraphMesh(mesh::CompositeTriangulation) = GraphMesh(SegmentMesh(mesh))
 
 
 # FIXME: make into a function
-begin 
+false && begin 
     model_path, normals = split_square_mesh(1., offset=0.2, distance=2)
     model = GmshDiscreteModel(model_path)
 
