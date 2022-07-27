@@ -191,6 +191,7 @@ true && begin
     u0, f0, h0 = (compile(arg, x) for arg in (u0_, f0_, flux_))
 
     errors, hs, ndofs = [], [], []
+    sols = []
     for k ∈ 2:8
         n = 2^(k)
 
@@ -202,6 +203,9 @@ true && begin
         # uh = helmholtz_solver(model, f0, u0, h0, Dirichlet_tags; pdegree=pdegree)
         uh = FVM_helmholtz_solver(model, f0, u0, h0, Dirichlet_tags)
 
+        !isempty(sols) && pop!(sols)
+        push!(sols, uh)
+
         Ω = get_triangulation(uh)
         dΩ = Measure(Ω, 2*pdegree)
 
@@ -211,6 +215,7 @@ true && begin
         append!(hs, minimum(get_mesh_sizes(Ω)))
         append!(ndofs, length(get_free_dof_ids(uh.fe_space)))
     end
+    uh, = sols
 
     rates = log.(errors[2:end]./errors[1:end-1])./log.(hs[2:end]./hs[1:end-1])
     rates = [NaN; rates]
@@ -218,4 +223,5 @@ true && begin
     for row in eachrow(table)
         @printf "h = %.2E dim(V) = %d |u-uh|_1 = %.4E rate = %.2f\n" row...
     end
+    writevtk(get_triangulation(uh), "fvm_helmholtz", order=1, cellfields=["uh" => uh])
 end

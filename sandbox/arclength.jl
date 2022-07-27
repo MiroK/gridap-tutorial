@@ -1,9 +1,4 @@
 using Gridap
-using GridapGmsh
-
-include("../GridapUtils.jl")
-using .GridapUtils: split_square_mesh
-
 using LightGraphs
 
 """
@@ -13,7 +8,8 @@ with values of archlength coordinate.
 function arclength_coordinate(V; tol=1E-10)
     # FIXME:
     # Check that we are in 2d and have some scalar elements with dofs being 
-    # the point evaluations
+    # the point evaluations. Also, here we assume that V = V(Γ) where Γ is an 
+    # from InterfaceTriangulation
     Γ = get_triangulation(V)
     # The idea is to build a graph and walk it
     cell_idx = Γ.plus.trian.tface_to_mface
@@ -83,54 +79,36 @@ function arclength_coordinate(V; tol=1E-10)
     return FEFunction(V, dist)
 end
 
-"""L^2 project expression into V"""
-function project(expr, δV; qdegree=4)
-    Ω = get_triangulation(δV)
 
-    V = TrialFESpace(δV)
-    dΩ = Measure(Ω, qdegree)
+using GridapGmsh
 
-    a(u, v) = ∫(u⋅v)*dΩ
-    L(v) = ∫(v⋅expr)*dΩ
+include("../GridapUtils.jl")
+using .GridapUtils: split_square_mesh
 
-    A = assemble_matrix(a, δV, δV)
-    b = assemble_vector(L, δV)
-    x = A\b 
 
-    uh = FEFunction(V, x)
-end
-
-model_path, _ = split_square_mesh(0.2; offset=0.2, distance=2)
+model_path, _ = split_square_mesh(0.2)#; offset=0.2, distance=2)
 
 model = GmshDiscreteModel(model_path)
 
 Ω0 = Triangulation(model, tags=["top_surface"])
 Ω1 = Triangulation(model, tags=["bottom_surface"])
 Γ = InterfaceTriangulation(Ω0, Ω1)
-# Let's have some vector space
-Velm = ReferenceFE(lagrangian, VectorValue{2, Float64}, 1)
-V = TestFESpace(Ω0, Velm)
-u = interpolate_everywhere(identity, V)
 
 # For representing flux
 Qelm = ReferenceFE(lagrangian, Float64, 1)
 δQ = TestFESpace(Γ, Qelm)
 
-ν = get_normal_vector(Γ)
-
-uh = project(u.⁺⋅ν.⁺, δQ)
-
-# Compute the arclength coordinate
 al = arclength_coordinate(δQ)
 
+dΓ = Measure(Γ, 4)
+# The test here is that the tangent should be orthogonal
+ν = get_normal_vector(Γ)
 
-using Plots 
-# NOTE: now we want to plot stuff against arc length. The dofs are not 
-# ordered in a way that x_val below is monotone...
-x_val = get_free_dof_values(al)
-# ... That's why we need to reorder
-idx = sortperm(x_val)
+τ = TensorValue(0., -1, 1, 0)⋅∇(al)
 
-y_val = get_free_dof_values(uh)
+e0 = sum(∫(τ⋅ν.⁻)*dΓ)
 
-plot(x_val[idx], y_val[idx])
+writevtk(Γ, "bar", order=1, cellfields=["ddd" => τ, "al" => al])
+
+@show (e0, )
+
