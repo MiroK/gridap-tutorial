@@ -122,7 +122,7 @@ data = (u0=u0_exact, u1=u1_exact,
 # As named tuple
 parameters = (; params...)
 
-sizes, errors = [], []
+sizes, errors, uhs = [], [], []
 for n ∈ 1:5
     scale = 1/2^n
 
@@ -150,4 +150,32 @@ for n ∈ 1:5
     for (i, row) in enumerate(table)
         @printf "\x1B[35m h = %.2E | |u-uh| = %.2E rate = %.2f\n\033[0m" row...
     end
+
+    !isempty(uhs) && pop!(uhs)
+    push!(uhs, (uh0, uh1))
 end
+
+(uh0, uh1) = pop!(uhs)
+
+"""Project -κ grad(f) to piecewise constants"""
+function get_flux(f, κ)
+    Ω = get_triangulation(f)
+    δV = TestFESpace(Ω, ReferenceFE(lagrangian, VectorValue{2, Float64}, 0))
+    V = TrialFESpace(δV)
+
+    dΩ = Measure(Ω, 5)
+    a(u, v) = ∫(u⋅v)*dΩ
+    L(v) = ∫((-κ*(∇(f)))⋅v)*dΩ
+
+    op = AffineFEOperator(a, L, V, δV)
+    
+    ls = LUSolver()
+    solver = LinearFESolver(ls)
+    flux = solve(solver, op)
+end
+
+
+writevtk(get_triangulation(uh0), "uh0", cellfields=["u" => uh0,
+                                                    "grad" => get_flux(uh0, params[:κ0])])
+writevtk(get_triangulation(uh1), "uh1", cellfields=["u" => uh1,
+                                                    "grad" => get_flux(uh1, params[:κ1])])
